@@ -1,20 +1,18 @@
-cmake_minimum_required(VERSION 3.14) # A good baseline version
-project(MyCppProject VERSION 1.0.0) # You can change the project name here
+cmake_minimum_required(VERSION 3.14)
+project(FluidSimulator)
 
-# --- This is the most important line for LazyVim ---
-# It tells CMake to generate the compile_commands.json file
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-# --------------------------------------------------
+set(CMAKE_CXX_STANDARD 17)
 
-# Use the current directory as the source root
-set(SOURCE_FILES src/main.cpp)
+# Find the required libraries
+find_package(OpenGL REQUIRED)
+find_package(glfw3 REQUIRED)
 
-# Create the executable target
-add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 
-# Set C++ standard to at least C++17
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-)
+# Add the executable
+add_executable(FluidSimulator src/main.cpp external/glad/src/glad.c)
+# add_executable(test_opengl test_opengl.cpp)
+
+target_include_directories(FluidSimulator PRIVATE external/glad/include)
+
+# Link libraries
+target_link_libraries(FluidSimulator OpenGL::GL glfw)
