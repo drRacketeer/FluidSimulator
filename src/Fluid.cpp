@@ -34,13 +34,14 @@ class Fluid {
         this->m = vector<double>(this->numCells, 1.0f);
         this->newM = vector<double>(this->numCells);
     }
+    private:
     enum Field {
-        U_FIELD = 0,
-        V_FIELD = 1,
-        S_FIELD = 2
+        U_FIELD,
+        V_FIELD,
+        S_FIELD
     };
 
-    void integrate(double dt,double gravity){
+    void integrate(double dt, double gravity){
         int n = this->numY;
         double fspeed = gravity * dt;
         for (int i = 1; i < this->numX; i++) {
@@ -189,7 +190,7 @@ class Fluid {
         this->u = this->newU;
         this->v = this->newV;
     }
-    void advectuSmoke(double dt) {
+    void advectSmoke(double dt) {
         //maybe use a setter
         this->newM = this->m;
 
@@ -211,5 +212,15 @@ class Fluid {
         }
         this->m = this->newM;
     }
+    public:
+    void simulate(double dt, double gravity, int numIters) {
+        integrate(dt, gravity);
+        
+        fill(p.begin(), p.end(), 0.0);
+        solveIncompressibility(numIters, dt);
 
+        extrapolate();
+        advectVel(dt);
+        advectSmoke(dt);
+    }
 };
