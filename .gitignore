@@ -43,6 +43,9 @@ build/
 Build/
 build-*/
 
+out/
+Out/
+out-*/
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt

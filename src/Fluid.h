@@ -9,14 +9,7 @@ class Fluid {
     int numY;
     int numCells;
     double h;
-    vector<double> u;
-    vector<double> v;
-    vector<double> newU;
-    vector<double> newV;
-    vector<double> p;
-    vector<double> s;
-    vector<double> m;
-    vector<double> newM;
+    vector<float> u, v, newU, newV, p, s, m, newM;
 
     Fluid(double density, int numX, int numY, double h);
     private:
