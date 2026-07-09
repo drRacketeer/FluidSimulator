@@ -141,7 +141,7 @@ int main() {
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
     
     // Color for debugging
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     
     // Step 2 Create 2D Texture to hold the simulation data
     GLuint texture;
@@ -182,10 +182,10 @@ int main() {
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     // Position attribute
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(double), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     // Texture coordinate attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(double), (void*)(2 * sizeof(double)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
     
     // Set a few cells near the bottom center to a high value (e.g., 2.0)

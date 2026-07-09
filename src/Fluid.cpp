@@ -16,7 +16,7 @@ Fluid::Fluid(double density, int numX, int numY, double h) {
     this->newV = vector<float>(this->numCells);
     this->p = vector<float>(this->numCells);
     this->s = vector<float>(this->numCells);
-    this->m = vector<float>(this->numCells, 1.0f);
+    this->m = vector<float>(this->numCells, 0.0f);
     this->newM = vector<float>(this->numCells);
 }
 
