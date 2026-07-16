@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -5,6 +6,9 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cmath>
+// bool for checking if mouse is pressed
+bool mousePressed = false;
 
 string readShaderFile(const std::string& filepath) {
     ifstream file(filepath);
@@ -67,6 +71,13 @@ GLuint createShaderProgram(const char* vertexSource, const char* fragmentSource)
 
     return program;
 }
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) mousePressed = true;
+        else if (action == GLFW_RELEASE) mousePressed = false;
+    }
+}
+
 int main() {
     
     // Fluid variables
@@ -104,13 +115,12 @@ int main() {
     
     // Init Fluid Object
     scene.initFluid(density, numX, numY, h);
-    // Fill s with 1.0 (fluid) and set boundaries to 0.0 (solid walls)
+    /*
     for (int i = 0; i < scene.fluid->numX; i++) {
         for (int j = 0; j < scene.fluid->numY; j++) {
             scene.fluid->s[i * scene.fluid->numY + j] = 1.0;
         }
     }
-    // Walls
     for (int i = 0; i < scene.fluid->numX; i++) {
         scene.fluid->s[i * scene.fluid->numY + 0] = 0.0;                // bottom
         scene.fluid->s[i * scene.fluid->numY + scene.fluid->numY - 1] = 0.0; // top
@@ -119,7 +129,7 @@ int main() {
         scene.fluid->s[0 * scene.fluid->numY + j] = 0.0;                // left
         scene.fluid->s[(scene.fluid->numX - 1) * scene.fluid->numY + j] = 0.0; // right
     }
-
+    */
     // STEP 1 Init OpenGL
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -195,7 +205,46 @@ int main() {
     // Step 5 Main loop
     glUseProgram(program);
     glUniform1i(glGetUniformLocation(program, "fluidTexture"), 0);
+
+    // Creating cursor for interaction and setting the callback function
+    GLFWcursor* cursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+
     while (!glfwWindowShouldClose(window)) {
+        // Inside the while loop, before or after simulate:
+        if (mousePressed) {
+            double xpos, ypos;
+            glfwGetCursorPos(window, &xpos, &ypos);
+            int width, height;
+            glfwGetWindowSize(window, &width, &height);
+            double xNorm = xpos / width;
+            double yNorm = 1.0 - (ypos / height); // flip
+
+            // map to grid indices (float), then round
+            float iFloat = xNorm * (scene.fluid->numX - 2) + 1; // skip ghost cells
+            float jFloat = yNorm * (scene.fluid->numY - 2) + 1;
+            int i = (int)round(iFloat);
+            int j = (int)round(jFloat);
+            i = clamp(i, 1, scene.fluid->numX - 2);
+            j = clamp(j, 1, scene.fluid->numY - 2);
+
+            // inject smoke with a brush
+            int radius = 2;
+            for (int di = -radius; di <= radius; ++di) {
+                for (int dj = -radius; dj <= radius; ++dj) {
+                    int ni = i + di;
+                    int nj = j + dj;
+                    if (ni >= 1 && ni < scene.fluid->numX-1 && nj >= 1 && nj < scene.fluid->numY-1) {
+                        float dist = sqrt(di*di + dj*dj);
+                        if (dist <= radius) {
+                            float weight = 1.0f - (dist / radius);
+                            scene.fluid->m[ni * scene.fluid->numY + nj] += 5.0f * weight;
+                        }
+                    }
+                }
+            }
+        }
+
         // 1. Simulate one step
         scene.fluid->simulate(scene.dt, scene.gravity, scene.numIters);
 
