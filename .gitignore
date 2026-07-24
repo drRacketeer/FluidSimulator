@@ -54,6 +54,14 @@ Makefile
 install_manifest.txt
 compile_commands.json
 
+CMakeLists.txt.user
+CMakeFiles
+CMakeScripts
+Testing
+install_manifest.txt
+CTestTestfile.cmake
+_deps
+CMakeUserPresets.json
 # Temporary files
 *.tmp
 *.log

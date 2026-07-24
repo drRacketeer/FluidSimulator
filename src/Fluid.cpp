@@ -5,19 +5,37 @@
 using namespace std;
 
 Fluid::Fluid(double density, int numX, int numY, double h) {
+    // Density : The physical density of the fluid in kg/m^3.
     this->density = density;
+    // NumX : Number of grid columns, including the 2 ghost cells (one at each horizontal boundary),
+    // so the actual fluid domain is numX - 2 cells wide
     this->numX = numX + 2;
+    // NumY : Number of grid rows, including the 2 ghost cells (one at each vertical boundary),
+    // the actual fluid domain is numY - 2 cells high.
     this->numY = numY + 2;
+    // numCells : Total number of entries in each vector: numX * numY.
     this->numCells = this->numX * this->numY;
+    // H : The grid spacing (cell width/height) in meters.
     this->h = h;
+    // V : The horizontal (x‑direction) velocity component.
     this->v = vector<float>(this->numCells);
+    // U : The vertical (y‑direction) velocity component.
     this->u = vector<float>(this->numCells);
+    // newU, newV : Temporary backup buffers for the velocity fields.
     this->newU = vector<float>(this->numCells);
     this->newV = vector<float>(this->numCells);
+    // P : The pressure field, defined at cell centers.
     this->p = vector<float>(this->numCells);
+    // S : The solid‑fluid marker array.
+    // s == 1.0 → Fluid cell (simulation is active).
+    // s == 0.0 → Solid cell (wall or obstacle).
     this->s = vector<float>(this->numCells);
+    // M : The scalar field that is visualized, this is the "smoke" (or dye) concentration.
     this->m = vector<float>(this->numCells, 0.0f);
+    // newM : Temporary backup buffer for the smoke field.
     this->newM = vector<float>(this->numCells);
+    // overRelaxation : SOR, speeds up pressure iteration in solveIncompressibility
+    this->overRelaxation = 1.9;
 }
 
 
@@ -52,13 +70,11 @@ void Fluid::solveIncompressibility(int numIters, double dt) {
                 if (s == 0.0){
                     continue;
                 }
-                //this part in general is kinda weird maybe rewrite
                 double div = this->u[(i+1)*n + j] - this->u[(i*n + j)] +
                     this->v[i*n + j + 1] - this->v[i*n + j];
                 double p = -div / s;
-                // p *= scene.overRelaxation find how that function works then insert back
+                p *= this->overRelaxation;
                 this->p[i*n + j] += cp * p;
-
                 this->u[i*n + j] -= sx0 * p;
                 this->u[(i+1)*n + j] += sx1 * p;
                 this->v[i*n + j] -= sy0 * p;
@@ -78,7 +94,6 @@ void Fluid::extrapolate() {
         this->v[(this->numX - 1)*n + i] = this->v[(this->numX - 2)*n + i];
     }
 }
-// add enum for field
 double Fluid::sampleField(double x, double y, Field field) { 
     int n = this->numY;
     double h = this->h;
@@ -94,7 +109,6 @@ double Fluid::sampleField(double x, double y, Field field) {
     vector<float> f;
     
     switch (field) {
-        //maybe create copies of the vector
         case U_FIELD: f = this->u; dy = h2; break;
         case V_FIELD: f = this->v; dx = h2; break;
         case S_FIELD: f = this->m; dx = h2; dy = h2; break;

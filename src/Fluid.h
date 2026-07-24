@@ -10,6 +10,7 @@ class Fluid {
     int numCells;
     double h;
     vector<float> u, v, newU, newV, p, s, m, newM;
+    double overRelaxation;
 
     Fluid(double density, int numX, int numY, double h);
     private:
