@@ -29,7 +29,7 @@ Fluid::Fluid(double density, int numX, int numY, double h) {
     // S : The solid‑fluid marker array.
     // s == 1.0 → Fluid cell (simulation is active).
     // s == 0.0 → Solid cell (wall or obstacle).
-    this->s = vector<float>(this->numCells);
+    this->s = vector<float>(this->numCells, 1.0f);
     // M : The scalar field that is visualized, this is the "smoke" (or dye) concentration.
     this->m = vector<float>(this->numCells, 0.0f);
     // newM : Temporary backup buffer for the smoke field.

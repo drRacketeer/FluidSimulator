@@ -87,7 +87,7 @@ int main() {
     struct Scene {
         double gravity = -9.81;
         double dt = 1.0 / 120.0;
-        int numIters = 10;
+        int numIters = 50;
         int frameNr = 0;
         double overRelaxation = 1.9;
         double obstacleX = 0.0;
@@ -100,6 +100,7 @@ int main() {
         bool showVelocities = false;
         bool showPressure = false;
         bool showSmoke = true;
+        float windSpeed = 0.5f;
         Fluid* fluid = nullptr;
 
         ~Scene(){ delete fluid; }
@@ -107,25 +108,22 @@ int main() {
         void initFluid(double density, int numX, int numY, double h) {
             fluid = new Fluid(density, numX, numY, h);
         }
-
     };
     Scene scene;
     
     // Init Fluid Object
     scene.initFluid(density, numX, numY, h);
     /*
-    for (int i = 0; i < scene.fluid->numX; i++) {
-        for (int j = 0; j < scene.fluid->numY; j++) {
-            scene.fluid->s[i * scene.fluid->numY + j] = 1.0;
+    // Constant wind going left to right
+    for (int i = 1; i < scene.fluid->numX - 1; i++) {
+        for (int j = 1; j < scene.fluid->numY - 1; j++) {
+            scene.fluid->u[i * scene.fluid->numY + j] = scene.windSpeed; // Wind blowing to the right
+            // v stays 0.0 (no vertical wind)
         }
     }
-    for (int i = 0; i < scene.fluid->numX; i++) {
-        scene.fluid->s[i * scene.fluid->numY + 0] = 0.0;                // bottom
-        scene.fluid->s[i * scene.fluid->numY + scene.fluid->numY - 1] = 0.0; // top
-    }
+    // Opening right boundary for smoke to escape
     for (int j = 0; j < scene.fluid->numY; j++) {
-        scene.fluid->s[0 * scene.fluid->numY + j] = 0.0;                // left
-        scene.fluid->s[(scene.fluid->numX - 1) * scene.fluid->numY + j] = 0.0; // right
+        scene.fluid->s[(scene.fluid->numX - 1) * scene.fluid->numY + j] = 1.0f;
     }
     */
     // STEP 1 Init OpenGL
@@ -136,6 +134,8 @@ int main() {
 
     GLFWwindow* window = glfwCreateWindow(800, 800, "Fluid Simulation", nullptr, nullptr);
     glfwMakeContextCurrent(window);
+    
+
     
     
     // Load OpenGL functions via GLAD
@@ -148,9 +148,17 @@ int main() {
     }
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
     
-    // Color for debugging
-    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+    int fbWidth, fbHeight;
+    glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+    glViewport(0, 0, fbWidth, fbHeight);   
+    std::cout << "Framebuffer size: " << fbWidth << " x " << fbHeight << std::endl;
+    std::cout << "Window size: ";
+    int winWidth, winHeight;
+    glfwGetWindowSize(window, &winWidth, &winHeight);
+    std::cout << winWidth << " x " << winHeight << std::endl;
     
+    // Color for debugging
+    glClearColor(0.0f, 1.0f, 0.0f, 1.0f); // Bright green
     // Step 2 Create 2D Texture to hold the simulation data
     GLuint texture;
     glGenTextures(1, &texture);
@@ -196,10 +204,6 @@ int main() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
     
-    // Set a few cells near the bottom center to a high value (e.g., 2.0)
-    int centerX = scene.fluid->numX / 2;
-    int centerY = 5; // a few rows above bottom
-    scene.fluid->m[centerX * scene.fluid->numY + centerY] = 2.0f;
     // Step 5 Main loop
     glUseProgram(program);
     glUniform1i(glGetUniformLocation(program, "fluidTexture"), 0);
@@ -207,11 +211,19 @@ int main() {
     // Creating cursor for interaction and setting the callback function
     GLFWcursor* cursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
+    
+    int sourceI = 2;  // near the left wall
+    int sourceJ = scene.fluid->numY / 2; // middle height
 
     while (!glfwWindowShouldClose(window)) {
+        // Adding the smoke through a channel on the left
+        // Add a little bit of smoke each frame
+        scene.fluid->m[sourceI * scene.fluid->numY + sourceJ] += 0.5f;
+
 
         // 1. Simulate one step
         scene.fluid->simulate(scene.dt, scene.gravity, scene.numIters);
+        
 
         // Check if simulation is running
         float sum = 0.0f;
@@ -228,7 +240,6 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
-
         // 4. Swap and poll
         glfwSwapBuffers(window);
         glfwPollEvents();
