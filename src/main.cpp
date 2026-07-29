@@ -80,14 +80,14 @@ int main() {
     
     // Fluid variables
     double density = 1000.0;
-    int numX = 20;
-    int numY = 20;
+    int numX = 60;
+    int numY = 60;
     double h = 0.02;
     // Setting up a Scene struct for further experimentation
     struct Scene {
         double gravity = -9.81;
         double dt = 1.0 / 120.0;
-        int numIters = 50;
+        int numIters = 40;
         int frameNr = 0;
         double overRelaxation = 1.9;
         double obstacleX = 0.0;
@@ -131,25 +131,22 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    GLFWwindow* window = glfwCreateWindow(800, 800, "Fluid Simulation", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1200, 800, "Fluid Simulation", nullptr, nullptr);
     glfwMakeContextCurrent(window);
     
-
-    
-    
-    // Load OpenGL functions via GLAD
-    gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
-
-    // Check if GLAD loaded correctly
+    // Load GLAD and check if it was loaded correctly
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
-    
+    // !!!!!!!!!!!!! Need to make the size of the simulation dynamic somehow, or not make it start in fullscreen
     int fbWidth, fbHeight;
     glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+    // probably needs to be fbWidth - 1 etc.
     glViewport(0, 0, fbWidth, fbHeight);   
     std::cout << "Framebuffer size: " << fbWidth << " x " << fbHeight << std::endl;
     std::cout << "Window size: ";
@@ -219,7 +216,9 @@ int main() {
         // Adding the smoke through a channel on the left
         // Add a little bit of smoke each frame
         scene.fluid->m[sourceI * scene.fluid->numY + sourceJ] += 0.5f;
-
+        // Viewport fix every frame
+        glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+        glViewport(0, 0, fbWidth, fbHeight);
 
         // 1. Simulate one step
         scene.fluid->simulate(scene.dt, scene.gravity, scene.numIters);
