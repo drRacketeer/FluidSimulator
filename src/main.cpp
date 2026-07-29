@@ -209,21 +209,25 @@ int main() {
     GLFWcursor* cursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     
-    int sourceI = 2;  // near the left wall
-    int sourceJ = scene.fluid->numY / 2; // middle height
 
     while (!glfwWindowShouldClose(window)) {
         // Adding the smoke through a channel on the left
         // Add a little bit of smoke each frame
+        //int row = scene.fluid->numX / 2;   // middle height (vertical)
+        //int col = 2;                       // near the left wall (horizontal)
+        //scene.fluid->m[row * scene.fluid->numY + col] += 0.5f;
+        int sourceI = 2;                     // horizontal: near the left wall
+        int sourceJ = scene.fluid->numY / 2; // vertical: middle height
         scene.fluid->m[sourceI * scene.fluid->numY + sourceJ] += 0.5f;
         // Viewport fix every frame
         glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
         glViewport(0, 0, fbWidth, fbHeight);
+        
+
 
         // 1. Simulate one step
         scene.fluid->simulate(scene.dt, scene.gravity, scene.numIters);
         
-
         // Check if simulation is running
         float sum = 0.0f;
         for (int i = 0; i < scene.fluid->numCells; i++) sum += scene.fluid->m[i];
