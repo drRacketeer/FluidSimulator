@@ -86,7 +86,7 @@ int main() {
     // Setting up a Scene struct for further experimentation
     struct Scene {
         double gravity = -9.81;
-        double dt = 1.0 / 120.0;
+        double dt = 1.0 / 60.0;
         int numIters = 40;
         int frameNr = 0;
         double overRelaxation = 1.9;
@@ -100,7 +100,6 @@ int main() {
         bool showVelocities = false;
         bool showPressure = false;
         bool showSmoke = true;
-        float windSpeed = 0.5f;
         Fluid* fluid = nullptr;
 
         ~Scene(){ delete fluid; }
@@ -113,19 +112,6 @@ int main() {
     
     // Init Fluid Object
     scene.initFluid(density, numX, numY, h);
-    /*
-    // Constant wind going left to right
-    for (int i = 1; i < scene.fluid->numX - 1; i++) {
-        for (int j = 1; j < scene.fluid->numY - 1; j++) {
-            scene.fluid->u[i * scene.fluid->numY + j] = scene.windSpeed; // Wind blowing to the right
-            // v stays 0.0 (no vertical wind)
-        }
-    }
-    // Opening right boundary for smoke to escape
-    for (int j = 0; j < scene.fluid->numY; j++) {
-        scene.fluid->s[(scene.fluid->numX - 1) * scene.fluid->numY + j] = 1.0f;
-    }
-    */
     // STEP 1 Init OpenGL
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -160,7 +146,6 @@ int main() {
     GLuint texture;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
-
     // Set filtering and wrap modes
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -213,17 +198,13 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         // Adding the smoke through a channel on the left
         // Add a little bit of smoke each frame
-        //int row = scene.fluid->numX / 2;   // middle height (vertical)
-        //int col = 2;                       // near the left wall (horizontal)
-        //scene.fluid->m[row * scene.fluid->numY + col] += 0.5f;
-        int sourceI = 2;                     // horizontal: near the left wall
-        int sourceJ = scene.fluid->numY / 2; // vertical: middle height
-        scene.fluid->m[sourceI * scene.fluid->numY + sourceJ] += 0.5f;
+        int sourceI = scene.fluid->numX - 2;                      // horizontal: near the left wall
+        int sourceJ = scene.fluid->numY / 2;                                          // vertical: middle height
+        scene.fluid->m[sourceJ * scene.fluid->numX + sourceI] += 0.5f;
         // Viewport fix every frame
+        
         glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
         glViewport(0, 0, fbWidth, fbHeight);
-        
-
 
         // 1. Simulate one step
         scene.fluid->simulate(scene.dt, scene.gravity, scene.numIters);
@@ -235,7 +216,7 @@ int main() {
 
         // 2. Upload the scalar field you want to visualize (e.g., smoke density 'm')
         glBindTexture(GL_TEXTURE_2D, texture);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numX, scene.fluid->numY, GL_RED, GL_FLOAT, scene.fluid->m.data());
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numX, scene.fluid->numY, GL_RED, GL_FLOAT, scene.fluid->p.data());
         
         // 3. Render
         glClear(GL_COLOR_BUFFER_BIT);

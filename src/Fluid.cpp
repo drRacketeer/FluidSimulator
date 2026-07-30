@@ -157,10 +157,14 @@ void Fluid::advectVel(double dt) {
         for (int j = 1; j < this->numY; j++) {
             
         //cnt++; seems to count iterations for debugging
-        // u component
+            // u component
             if (this->s[i*n + j] != 0.0 && this->s[(i-1)*n + j] != 0.0 && j < this->numY - 1) {
+                // original
                 double x = i*h;
                 double y = j*h + h2;
+                // opengl transposed
+                //double x = j*h;
+                //double y = i*h + h2;
                 double u = this->u[i*n + j];
                 double v = this->avgV(i, j);
                 x = x - dt*u;
@@ -168,9 +172,14 @@ void Fluid::advectVel(double dt) {
                 u = this->sampleField(x, y, U_FIELD);
                 this->newU[i*n + j] = u;
             }
+            // v component
             if (this->s[i*n + j] != 0.0 && this->s[i*n + j-1] != 0.0 && i < this->numX - 1) {
+                // original
                 double x = i*h + h2;
                 double y = j*h;
+                // opengl transposed
+                //double x = j*h + h2;
+                //double y = i*h;
                 double u = this->avgU(i, j);
                 double v = this->v[i*n + j];
                 x = x - dt*u;
@@ -197,9 +206,12 @@ void Fluid::advectSmoke(double dt) {
             if (this->s[i*n + j] != 0.0) {
                 double u = (this->u[i*n + j] + this->u[(i+1)*n + j]) * 0.5;
                 double v = (this->v[i*n + j] + this->v[i*n + j + 1]) * 0.5;
+                // original
                 double x = i*h + h2 - dt*u;
                 double y = j*h + h2 - dt*v;
-
+                // opengl transposed
+                //double x = j*h + h2 - dt*u;   // horizontal uses j
+                //double y = i*h + h2 - dt*v;   // vertical uses i
                 this->newM[i*n + j] = this->sampleField(x, y, S_FIELD);
             }
         }
