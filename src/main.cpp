@@ -86,7 +86,7 @@ int main() {
     // Setting up a Scene struct for further experimentation
     struct Scene {
         double gravity = -9.81;
-        double dt = 1.0 / 60.0;
+        double dt = 1.0 / 120.0;
         int numIters = 40;
         int frameNr = 0;
         double overRelaxation = 1.9;
@@ -194,12 +194,14 @@ int main() {
     GLFWcursor* cursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     
-
+    std::cout << scene.fluid->numX << std::endl;
+    std::cout << scene.fluid->numY << std::endl;
+    std::cout << scene.fluid->numCells << std::endl;
     while (!glfwWindowShouldClose(window)) {
         // Adding the smoke through a channel on the left
         // Add a little bit of smoke each frame
-        int sourceI = scene.fluid->numX - 2;                      // horizontal: near the left wall
-        int sourceJ = scene.fluid->numY / 2;                                          // vertical: middle height
+        int sourceI = scene.fluid->numX - 2;                      // horizontal: near the right wall
+        int sourceJ = scene.fluid->numY / 2;                      // vertical: middle height
         scene.fluid->m[sourceJ * scene.fluid->numX + sourceI] += 0.5f;
         // Viewport fix every frame
         
@@ -210,13 +212,14 @@ int main() {
         scene.fluid->simulate(scene.dt, scene.gravity, scene.numIters);
         
         // Check if simulation is running
+        /*
         float sum = 0.0f;
         for (int i = 0; i < scene.fluid->numCells; i++) sum += scene.fluid->m[i];
         std::cout << "Average m: " << sum / scene.fluid->numCells << std::endl;
-
+        */
         // 2. Upload the scalar field you want to visualize (e.g., smoke density 'm')
         glBindTexture(GL_TEXTURE_2D, texture);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numX, scene.fluid->numY, GL_RED, GL_FLOAT, scene.fluid->p.data());
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numX, scene.fluid->numY, GL_RED, GL_FLOAT, scene.fluid->m.data());
         
         // 3. Render
         glClear(GL_COLOR_BUFFER_BIT);

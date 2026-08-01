@@ -4,30 +4,30 @@ using namespace std;
 
 class Fluid {
     public:
-    double density;
+    float density;
     int numX;
     int numY;
     int numCells;
-    double h;
+    float h;
     vector<float> u, v, newU, newV, p, s, m, newM;
-    double overRelaxation;
+    float overRelaxation;
 
-    Fluid(double density, int numX, int numY, double h);
+    Fluid(float density, int numX, int numY, float h);
     private:
     enum Field {
         U_FIELD,
         V_FIELD,
         S_FIELD
     };
-    void integrate(double dt, double gravity);
-    void solveIncompressibility(int numIters, double dt);
+    void integrate(float dt, float gravity);
+    void solveIncompressibility(int numIters, float dt);
     void extrapolate();
-    double sampleField(double x, double y, Field field);
+    double sampleField(float x, float y, Field field);
     double avgU(int i, int j);
     double avgV(int i, int j);
-    void advectVel(double dt);
-    void advectSmoke(double dt);
+    void advectVel(float dt);
+    void advectSmoke(float dt);
     public:
-    void simulate(double dt, double gravity, int numIters);
+    void simulate(float dt, float gravity, int numIters);
     
 };

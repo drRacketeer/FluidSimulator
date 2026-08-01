@@ -4,7 +4,7 @@
 #include <cmath>
 using namespace std;
 
-Fluid::Fluid(double density, int numX, int numY, double h) {
+Fluid::Fluid(float density, int numX, int numY, float h) {
     // Density : The physical density of the fluid in kg/m^3.
     this->density = density;
     // NumX : Number of grid columns, including the 2 ghost cells (one at each horizontal boundary),
@@ -35,13 +35,13 @@ Fluid::Fluid(double density, int numX, int numY, double h) {
     // newM : Temporary backup buffer for the smoke field.
     this->newM = vector<float>(this->numCells);
     // overRelaxation : SOR, speeds up pressure iteration in solveIncompressibility
-    this->overRelaxation = 1.9;
+    this->overRelaxation = 1.9f;
 }
 
 
-void Fluid::integrate(double dt, double gravity){
+void Fluid::integrate(float dt, float gravity){
     int n = this->numY;
-    double fspeed = gravity * dt;
+    float fspeed = gravity * dt;
     for (int i = 1; i < this->numX; i++) {
         for (int j = 1; j < this->numY - 1; j++) {
             if (this->s[i*n + j] != 0 && this->s[i*n + j-1] != 0) {
@@ -50,29 +50,29 @@ void Fluid::integrate(double dt, double gravity){
         }
     }
 }
-void Fluid::solveIncompressibility(int numIters, double dt) {
+void Fluid::solveIncompressibility(int numIters, float dt) {
     int n = this->numY;
-    double cp = this->density * this->h / dt;
+    float cp = this->density * this->h / dt;
     
     for (int iter = 0; iter < numIters; iter++) {
         for (int i = 1; i < this->numX - 1; i++) {
             for (int j = 1; j < this->numY-1; j++) {
-                if (this->s[i*n+j] == 0.0) {
+                if (this->s[i*n+j] == 0.0f) {
                     continue;
                 }
-                double s = this->s[i*n +j];
-                double sx0 = this->s[(i-1)*n + j];
-                double sx1 = this->s[(i+1)*n + j];
+                float s = this->s[i*n +j];
+                float sx0 = this->s[(i-1)*n + j];
+                float sx1 = this->s[(i+1)*n + j];
 
-                double sy0 = this->s[i*n + j - 1];
-                double sy1 = this->s[i*n + j + 1];
+                float sy0 = this->s[i*n + j - 1];
+                float sy1 = this->s[i*n + j + 1];
                 s = sx0 + sx1 + sy0 + sy1;
-                if (s == 0.0){
+                if (s == 0.0f){
                     continue;
                 }
-                double div = this->u[(i+1)*n + j] - this->u[(i*n + j)] +
+                float div = this->u[(i+1)*n + j] - this->u[(i*n + j)] +
                     this->v[i*n + j + 1] - this->v[i*n + j];
-                double p = -div / s;
+                float p = -div / s;
                 p *= this->overRelaxation;
                 this->p[i*n + j] += cp * p;
                 this->u[i*n + j] -= sx0 * p;
@@ -94,17 +94,17 @@ void Fluid::extrapolate() {
         this->v[(this->numX - 1)*n + i] = this->v[(this->numX - 2)*n + i];
     }
 }
-double Fluid::sampleField(double x, double y, Field field) { 
+double Fluid::sampleField(float x, float y, Field field) { 
     int n = this->numY;
-    double h = this->h;
-    double h1 = 1.0/h;
-    double h2 = 0.5*h;
+    float h = this->h;
+    float h1 = 1.0f/h;
+    float h2 = 0.5f*h;
     
     x = max(min(x, this->numX * h), h);
     y = max(min(y, this->numY * h), h);
 
-    double dx = 0.0;
-    double dy = 0.0;
+    float dx = 0.0f;
+    float dy = 0.0f;
 
     vector<float> f;
     
@@ -113,17 +113,17 @@ double Fluid::sampleField(double x, double y, Field field) {
         case V_FIELD: f = this->v; dx = h2; break;
         case S_FIELD: f = this->m; dx = h2; dy = h2; break;
     }
-    double x0 = min(floor((x-dx)*h1), (double)this->numX-1.0);
-    double tx = ((x-dx) - x0 * h) * h1;
-    double x1 = min(x0 + 1.0, (double)this->numX-1.0);
+    float x0 = min(floor((x-dx)*h1), (float)this->numX-1.0f);
+    float tx = ((x-dx) - x0 * h) * h1;
+    float x1 = min(x0 + 1.0f, (float)this->numX-1.0f);
     
-    double y0 = min(floor((y-dy)*h1), (double)this->numY-1.0);
-    double ty = ((y-dy) - y0 * h) * h1;
-    double y1 = min(y0 + 1.0, (double)this->numY-1.0);
-    double sx = 1.0 - tx;
-    double sy = 1.0 - ty;
+    float y0 = min(floor((y-dy)*h1), (float)this->numY-1.0f);
+    float ty = ((y-dy) - y0 * h) * h1;
+    float y1 = min(y0 + 1.0f, (float)this->numY-1.0f);
+    float sx = 1.0f - tx;
+    float sy = 1.0f - ty;
     
-    double val = sx*sy * f[x0*n +y0] +
+    float val = sx*sy * f[x0*n +y0] +
         tx*sy * f[(int)x1*n + (int)y0] +
         tx*ty * f[(int)x1*n + (int)y1] +
         sx*ty * f[(int)x0*n + (int)y1];
@@ -133,55 +133,49 @@ double Fluid::sampleField(double x, double y, Field field) {
 
 double Fluid::avgU(int i, int j) {
     int n = this->numY;
-    double u = (this->u[i*n + j-1] + this->u[i*n + j] +
-                this->u[(i+1)*n + j-1] + this->u[(i+1)*n + j]) * 0.25;
+    float u = (this->u[i*n + j-1] + this->u[i*n + j] +
+                this->u[(i+1)*n + j-1] + this->u[(i+1)*n + j]) * 0.25f;
     return u;
 }
 
 double Fluid::avgV(int i, int j) {
     int n = this->numY;
-    double v = (this->v[(i-1)*n + j] + this->v[i*n + j] +
-                this->v[(i-1)*n + j+1] + this->v[i*n + j+1]) * 0.25;
+    float v = (this->v[(i-1)*n + j] + this->v[i*n + j] +
+                this->v[(i-1)*n + j+1] + this->v[i*n + j+1]) * 0.25f;
     return v;
 }
 
-void Fluid::advectVel(double dt) {
+void Fluid::advectVel(float dt) {
     this->newU = this->u;
     this->newV = this->v;
 
     int n = this->numY;
-    double h = this->h;
-    double h2 = 0.5 * h;
+    float h = this->h;
+    float h2 = 0.5f * h;
 
     for (int i = 1; i < this->numX; i++) {
         for (int j = 1; j < this->numY; j++) {
             
         //cnt++; seems to count iterations for debugging
             // u component
-            if (this->s[i*n + j] != 0.0 && this->s[(i-1)*n + j] != 0.0 && j < this->numY - 1) {
+            if (this->s[i*n + j] != 0.0f && this->s[(i-1)*n + j] != 0.0f && j < this->numY - 1) {
                 // original
-                double x = i*h;
-                double y = j*h + h2;
-                // opengl transposed
-                //double x = j*h;
-                //double y = i*h + h2;
-                double u = this->u[i*n + j];
-                double v = this->avgV(i, j);
+                float x = i*h;
+                float y = j*h + h2;
+                float u = this->u[i*n + j];
+                float v = this->avgV(i, j);
                 x = x - dt*u;
                 y = y - dt*v;
                 u = this->sampleField(x, y, U_FIELD);
                 this->newU[i*n + j] = u;
             }
             // v component
-            if (this->s[i*n + j] != 0.0 && this->s[i*n + j-1] != 0.0 && i < this->numX - 1) {
+            if (this->s[i*n + j] != 0.0f && this->s[i*n + j-1] != 0.0f && i < this->numX - 1) {
                 // original
-                double x = i*h + h2;
-                double y = j*h;
-                // opengl transposed
-                //double x = j*h + h2;
-                //double y = i*h;
-                double u = this->avgU(i, j);
-                double v = this->v[i*n + j];
+                float x = i*h + h2;
+                float y = j*h;
+                float u = this->avgU(i, j);
+                float v = this->v[i*n + j];
                 x = x - dt*u;
                 y = y - dt*v;
                 v = this->sampleField(x, y, V_FIELD);
@@ -193,22 +187,22 @@ void Fluid::advectVel(double dt) {
     this->u = this->newU;
     this->v = this->newV;
 }
-void Fluid::advectSmoke(double dt) {
+void Fluid::advectSmoke(float dt) {
     //maybe use a setter
     this->newM = this->m;
 
     int n = this->numY;
-    double h = this->h;
-    double h2 = 0.5 * h;
+    float h = this->h;
+    float h2 = 0.5f * h;
 
     for (int i = 1; i < this->numX - 1; i++) {
         for (int j = 1; j < this->numY - 1; j++) {
-            if (this->s[i*n + j] != 0.0) {
-                double u = (this->u[i*n + j] + this->u[(i+1)*n + j]) * 0.5;
-                double v = (this->v[i*n + j] + this->v[i*n + j + 1]) * 0.5;
+            if (this->s[i*n + j] != 0.0f) {
+                float u = (this->u[i*n + j] + this->u[(i+1)*n + j]) * 0.5f;
+                float v = (this->v[i*n + j] + this->v[i*n + j + 1]) * 0.5f;
                 // original
-                double x = i*h + h2 - dt*u;
-                double y = j*h + h2 - dt*v;
+                float x = i*h + h2 - dt*u;
+                float y = j*h + h2 - dt*v;
                 // opengl transposed
                 //double x = j*h + h2 - dt*u;   // horizontal uses j
                 //double y = i*h + h2 - dt*v;   // vertical uses i
@@ -218,10 +212,10 @@ void Fluid::advectSmoke(double dt) {
     }
     this->m = this->newM;
 }
-void Fluid::simulate(double dt, double gravity, int numIters) {
+void Fluid::simulate(float dt, float gravity, int numIters) {
     integrate(dt, gravity);
     
-    fill(p.begin(), p.end(), 0.0);
+    fill(p.begin(), p.end(), 0.0f);
     solveIncompressibility(numIters, dt);
 
     extrapolate();
