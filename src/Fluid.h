@@ -22,9 +22,9 @@ class Fluid {
     void integrate(float dt, float gravity);
     void solveIncompressibility(int numIters, float dt);
     void extrapolate();
-    double sampleField(float x, float y, Field field);
-    double avgU(int i, int j);
-    double avgV(int i, int j);
+    float sampleField(float x, float y, Field field);
+    float avgU(int i, int j);
+    float avgV(int i, int j);
     void advectVel(float dt);
     void advectSmoke(float dt);
     public:

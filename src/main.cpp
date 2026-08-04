@@ -1,3 +1,4 @@
+#include <cmath>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -17,7 +18,7 @@ string readShaderFile(const std::string& filepath) {
     std::stringstream buffer;
     buffer << file.rdbuf();
     return buffer.str();
-    }
+}
 
 GLuint createShaderProgram(const char* vertexSource, const char* fragmentSource) {
     // Compile Vertex Shader
@@ -78,23 +79,24 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 int main() {
     
-    // Fluid variables
-    double density = 1000.0;
-    int numX = 60;
-    int numY = 60;
-    double h = 0.02;
     // Setting up a Scene struct for further experimentation
     struct Scene {
-        double gravity = -9.81;
-        double dt = 1.0 / 120.0;
+        // Fluid param
+        float density = 1000.0f;
+        int numX = 100;
+        int numY = 60;
+        float h = 0.02f;
+
+        float gravity = -9.81f;
+        float dt = 1.0f / 60.0f;
         int numIters = 40;
         int frameNr = 0;
-        double overRelaxation = 1.9;
-        double obstacleX = 0.0;
-        double obstacleY = 0.0;
-        double obstacleRadius = 0.15;
+        float overRelaxation = 1.9f;
+        float obstacleX = 0.0f;
+        float obstacleY = 0.0f;
+        float obstacleRadius = 0.15f;
         bool paused = false;
-        int sceneNr = 0;
+        int sceneNr = 1;
         bool showObstacle = false;
         bool showStreamlines = false;
         bool showVelocities = false;
@@ -102,16 +104,99 @@ int main() {
         bool showSmoke = true;
         Fluid* fluid = nullptr;
 
+        void setupScene(int sceneNr = 1){
+            fluid = new Fluid(density, numX, numY, h);
+            int n = numY;
+            if (sceneNr == 1 || sceneNr == 3) { // vortex shedding
+                float inVel = 2.0f;
+                for (int i = 0; i<fluid->numX; i++) {
+                    for (int j = 0; j < fluid->numY; j++) {
+                        float s = 1.0f; //fluid
+                        if (i == 0 || j == 0 || j == fluid->numY-1) {
+                            s = 0.0f;
+                        }
+                        fluid->s[i*n + j] = s;
+                        if (i == 1) {
+                            fluid->u[i*n + j] = inVel;
+                        }
+                    }
+                }
+
+                float pipeH = 0.1f * fluid->numY;
+                int minJ = floor(0.5f * fluid->numY - 0.5f * pipeH);
+                int maxJ = floor(0.5f * fluid->numY + 0.5f * pipeH);
+                
+                for (int j = minJ; j < maxJ; j++) {
+                    fluid->m[j] = 0.0f;
+                }
+                
+                setObstacle(0.4, 0.5, true);
+
+                gravity = 0.0f;
+                showPressure = false;
+                showSmoke = true;
+                showStreamlines = false;
+                showVelocities = false;
+
+                if (sceneNr == 3) {
+                    dt = 1.0f / 120.0f;
+                    numIters = 100;
+                    showPressure = true;
+                }
+            }
+
+        }
+
         ~Scene(){ delete fluid; }
 
-        void initFluid(double density, int numX, int numY, double h) {
+        void initFluid(float density, int numX, int numY, float h) {
             fluid = new Fluid(density, numX, numY, h);
+        }
+        void simulateFluid(){
+            fluid->simulate(dt, gravity, numIters);
+        }
+        void setObstacle(float x, float y, bool reset) {
+            float vx = 0.0f;
+            float vy = 0.0f;
+
+            if (!reset) {
+                vx = (x - this->obstacleX) / this->dt;
+                vy = (y - this->obstacleY) / this->dt;
+            }
+            this->obstacleX = x;
+            this->obstacleY = y;
+            float r = this->obstacleRadius;
+
+            int n = this->fluid->numY;
+            for (int i = 1; i < this->fluid->numX - 2; i++) {
+                for (int j = 1; j < this->fluid->numY - 2; j++) {
+                
+                    this->fluid->s[i*n + j] = 1.0f;
+
+                    float dx = (i + 0.5f) * this->fluid->h - x;
+                    float dy = (j + 0.5f) * this->fluid->h - y;
+
+                    if (dx * dx + dy * dy < r * r) {
+                        this->fluid->s[i*n + j] = 0.0f;
+                        if (this->sceneNr == 2) {
+                            this->fluid->m[i*n + j] = 0.5f + 0.5f * sin(0.1f * this->frameNr);
+                        } else {
+                            this->fluid->m[i*n + j] = 1.0f;
+                        }
+                        this->fluid->u[i*n + j] = vx;
+                        this->fluid->u[(i+1)*n + j] = vx;
+                        this->fluid->v[i*n + j] = vy;
+                        this->fluid->v[i*n + j+1] = vy;
+                    }
+                }
+            }
+            this->showObstacle = true;
         }
     };
     Scene scene;
+    scene.setupScene();
     
     // Init Fluid Object
-    scene.initFluid(density, numX, numY, h);
     // STEP 1 Init OpenGL
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -153,7 +238,8 @@ int main() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Allocate storage for the texture on GPU (initially zero)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, scene.fluid->numX, scene.fluid->numY, 0, GL_RED, GL_FLOAT, nullptr);
+    // numX and numY are also swapped to make it comform to the way it reads the fluid vectors
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, scene.fluid->numY, scene.fluid->numX, 0, GL_RED, GL_FLOAT, nullptr);
     // Step 3 Build
     string vertexSrc = readShaderFile("src/vertex.glsl");
     string fragmentSrc = readShaderFile("src/fragment.glsl");
@@ -193,33 +279,22 @@ int main() {
     // Creating cursor for interaction and setting the callback function
     GLFWcursor* cursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
-    
-    std::cout << scene.fluid->numX << std::endl;
-    std::cout << scene.fluid->numY << std::endl;
-    std::cout << scene.fluid->numCells << std::endl;
+    std::cout << scene.gravity << std::endl;
     while (!glfwWindowShouldClose(window)) {
-        // Adding the smoke through a channel on the left
-        // Add a little bit of smoke each frame
-        int sourceI = scene.fluid->numX - 2;                      // horizontal: near the right wall
-        int sourceJ = scene.fluid->numY / 2;                      // vertical: middle height
-        scene.fluid->m[sourceJ * scene.fluid->numX + sourceI] += 0.5f;
-        // Viewport fix every frame
+        //int sourceI = 2;                      // horizontal: near the right wall
+        //int sourceJ = scene.fluid->numY / 2;                      // vertical: middle height
+        //scene.fluid->m[sourceJ * scene.fluid->numX + sourceI] = 0.5f;
         
+        // Viewport fix every frame
         glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
         glViewport(0, 0, fbWidth, fbHeight);
 
         // 1. Simulate one step
-        scene.fluid->simulate(scene.dt, scene.gravity, scene.numIters);
-        
-        // Check if simulation is running
-        /*
-        float sum = 0.0f;
-        for (int i = 0; i < scene.fluid->numCells; i++) sum += scene.fluid->m[i];
-        std::cout << "Average m: " << sum / scene.fluid->numCells << std::endl;
-        */
+        scene.simulateFluid();
         // 2. Upload the scalar field you want to visualize (e.g., smoke density 'm')
         glBindTexture(GL_TEXTURE_2D, texture);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numX, scene.fluid->numY, GL_RED, GL_FLOAT, scene.fluid->m.data());
+        // numX and numY are also swapped here to make it comform to the way it reads the fluid vectors
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numY, scene.fluid->numX, GL_RED, GL_FLOAT, scene.fluid->m.data());
         
         // 3. Render
         glClear(GL_COLOR_BUFFER_BIT);
