@@ -190,14 +190,6 @@ GLuint createShaderProgram(const char* vertexSource, const char* fragmentSource)
 
     return program;
 }
-/*
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        if (action == GLFW_PRESS) mousePressed = true;
-        else if (action == GLFW_RELEASE) mousePressed = false;
-    }
-}
-*/
 
 // Mouse button callback:
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
@@ -249,7 +241,6 @@ int main() {
         return -1;
     }
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
-    // !!!!!!!!!!!!! Need to make the size of the simulation dynamic somehow, or not make it start in fullscreen
     glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
     // probably needs to be fbWidth - 1 etc.
     glViewport(0, 0, fbWidth, fbHeight);   
@@ -258,7 +249,7 @@ int main() {
     glfwGetWindowSize(window, &winWidth, &winHeight);
     std::cout << winWidth << " x " << winHeight << std::endl;
     
-    // Color for debugging
+    // Color for debugging incase something happens with the view
     glClearColor(0.0f, 1.0f, 0.0f, 1.0f); // Bright green
     // Step 2 Create 2D Texture to hold the simulation data
     GLuint texture;
