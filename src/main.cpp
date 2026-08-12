@@ -33,7 +33,7 @@ struct Scene {
 
     void setupScene(int sceneNr = 1){
         fluid = new Fluid(density, numX, numY, h);
-        int n = numY;
+        int n = fluid->numY;
         if (sceneNr == 1 || sceneNr == 3) { // vortex shedding
             float inVel = 2.0f;
             for (int i = 0; i<fluid->numX; i++) {
@@ -304,6 +304,18 @@ int main() {
     GLFWcursor* cursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, cursor_pos_callback);
+    
+    // After setupScene()
+    int n = scene.fluid->numY;
+    std::cout << "Top row (j=0): ";
+    for (int i = 0; i < scene.fluid->numX; ++i)
+        std::cout << scene.fluid->s[i*n + 0] << " ";
+    std::cout << "\n";
+
+    std::cout << "Bottom row (j=" << scene.fluid->numY-1 << "): ";
+    for (int i = 0; i < scene.fluid->numX; ++i)
+        std::cout << scene.fluid->s[i*n + (scene.fluid->numY-1)] << " ";
+    std::cout << "\n";
 
     while (!glfwWindowShouldClose(window)) {
         // Viewport fix every frame
@@ -315,7 +327,7 @@ int main() {
         // 2. Upload the scalar field you want to visualize (e.g., smoke density 'm')
         glBindTexture(GL_TEXTURE_2D, texture);
         // numX and numY are also swapped here to make it comform to the way it reads the fluid vectors
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numY, scene.fluid->numX, GL_RED, GL_FLOAT, scene.fluid->m.data());
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numY, scene.fluid->numX, GL_RED, GL_FLOAT, scene.fluid->s.data());
         
         // 3. Render
         glClear(GL_COLOR_BUFFER_BIT);
