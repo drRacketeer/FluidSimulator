@@ -98,8 +98,8 @@ void Fluid::extrapolate() {
 float Fluid::sampleField(float x, float y, Field field) { 
     int n = this->numY;
     float h = this->h;
-    float h1 = 1.0f/h;
-    float h2 = 0.5f*h;
+    float h1 = 1.0f / h;
+    float h2 = 0.5f * h;
     
     x = max(min(x, this->numX * h), h);
     y = max(min(y, this->numY * h), h);
@@ -107,12 +107,12 @@ float Fluid::sampleField(float x, float y, Field field) {
     float dx = 0.0f;
     float dy = 0.0f;
 
-    vector<float> f;
+    const vector<float>* f = nullptr;
     
     switch (field) {
-        case U_FIELD: f = this->u; dy = h2; break;
-        case V_FIELD: f = this->v; dx = h2; break;
-        case S_FIELD: f = this->m; dx = h2; dy = h2; break;
+        case U_FIELD: f = &this->u; dy = h2; break;
+        case V_FIELD: f = &this->v; dx = h2; break;
+        case S_FIELD: f = &this->m; dx = h2; dy = h2; break;
     }
     float x0 = min(floor((x-dx)*h1), this->numX-1.0f);
     float tx = ((x-dx) - x0 * h) * h1;
@@ -124,10 +124,11 @@ float Fluid::sampleField(float x, float y, Field field) {
     float sx = 1.0f - tx;
     float sy = 1.0f - ty;
     
-    float val = sx*sy * f[x0*n +y0] +
-        tx*sy * f[(int)x1*n + (int)y0] +
-        tx*ty * f[(int)x1*n + (int)y1] +
-        sx*ty * f[(int)x0*n + (int)y1];
+
+    float val = sx*sy * (*f)[(int)x0*n + (int)y0] +
+                tx*sy * (*f)[(int)x1*n + (int)y0] +
+                tx*ty * (*f)[(int)x1*n + (int)y1] +
+                sx*ty * (*f)[(int)x0*n + (int)y1];
 
     return val;
 }
