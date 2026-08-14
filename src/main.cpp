@@ -10,6 +10,7 @@
 struct Scene {
     // Fluid param
     float density = 1000.0f;
+    // initial numX and numY without +2 ghostcells
     int numX = 100;
     int numY = 60;
     float h = 0.02f;
@@ -34,12 +35,15 @@ struct Scene {
     void setupScene(int sceneNr = 1){
         fluid = new Fluid(density, numX, numY, h);
         int n = fluid->numY;
+        int &numX = fluid->numX;
+        int &numY = fluid->numY;
+        
         if (sceneNr == 1 || sceneNr == 3) { // vortex shedding
             float inVel = 2.0f;
-            for (int i = 0; i<fluid->numX; i++) {
-                for (int j = 0; j < fluid->numY; j++) {
+            for (int i = 0; i < numX; i++) {
+                for (int j = 0; j < numY; j++) {
                     float s = 1.0f; //fluid
-                    if (i == 0 || j == 0 || j == fluid->numY-1) {
+                    if (i == 0 || j == 0 || j == numY-1) {
                         s = 0.0f;
                     }
                     fluid->s[i*n + j] = s;
@@ -49,9 +53,9 @@ struct Scene {
                 }
             }
 
-            float pipeH = 0.1f * fluid->numY;
-            int minJ = floor(0.5f * fluid->numY - 0.5f * pipeH);
-            int maxJ = floor(0.5f * fluid->numY + 0.5f * pipeH);
+            float pipeH = 0.1f * numY;
+            int minJ = floor(0.5f * numY - 0.5f * pipeH);
+            int maxJ = floor(0.5f * numY + 0.5f * pipeH);
             
             for (int j = minJ; j < maxJ; j++) {
                 fluid->m[j] = 0.0f;
@@ -71,7 +75,6 @@ struct Scene {
                 showPressure = true;
             }
         }
-
     }
 
     ~Scene(){ delete fluid; }
@@ -87,37 +90,37 @@ struct Scene {
         float vy = 0.0f;
 
         if (!reset) {
-            vx = (x - this->obstacleX) / this->dt;
-            vy = (y - this->obstacleY) / this->dt;
+            vx = (x - obstacleX) / dt;
+            vy = (y - obstacleY) / dt;
         }
-        this->obstacleX = x;
-        this->obstacleY = y;
-        float r = this->obstacleRadius;
+        obstacleX = x;
+        obstacleY = y;
+        float r = obstacleRadius;
 
-        int n = this->fluid->numY;
-        for (int i = 1; i < this->fluid->numX - 2; i++) {
-            for (int j = 1; j < this->fluid->numY - 2; j++) {
+        int n = fluid->numY;
+        for (int i = 1; i < fluid->numX - 2; i++) {
+            for (int j = 1; j < fluid->numY - 2; j++) {
             
-                this->fluid->s[i*n + j] = 1.0f;
+                fluid->s[i*n + j] = 1.0f;
 
-                float dx = (i + 0.5f) * this->fluid->h - x;
-                float dy = (j + 0.5f) * this->fluid->h - y;
+                float dx = (i + 0.5f) * fluid->h - x;
+                float dy = (j + 0.5f) * fluid->h - y;
 
                 if (dx * dx + dy * dy < r * r) {
-                    this->fluid->s[i*n + j] = 0.0f;
-                    if (this->sceneNr == 2) {
-                        this->fluid->m[i*n + j] = 0.5f + 0.5f * sin(0.1f * this->frameNr);
+                    fluid->s[i*n + j] = 0.0f;
+                    if (sceneNr == 2) {
+                        fluid->m[i*n + j] = 0.5f + 0.5f * sin(0.1f * frameNr);
                     } else {
-                        this->fluid->m[i*n + j] = 1.0f;
+                        fluid->m[i*n + j] = 1.0f;
                     }
-                    this->fluid->u[i*n + j] = vx;
-                    this->fluid->u[(i+1)*n + j] = vx;
-                    this->fluid->v[i*n + j] = vy;
-                    this->fluid->v[i*n + j+1] = vy;
+                    fluid->u[i*n + j] = vx;
+                    fluid->u[(i+1)*n + j] = vx;
+                    fluid->v[i*n + j] = vy;
+                    fluid->v[i*n + j+1] = vy;
                 }
             }
         }
-        this->showObstacle = true;
+        showObstacle = true;
     }
 };
 
