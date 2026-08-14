@@ -11,8 +11,8 @@ struct Scene {
     // Fluid param
     float density = 1000.0f;
     // initial numX and numY without +2 ghostcells
-    int numX = 100;
-    int numY = 60;
+    int numX = 140;
+    int numY = 80;
     float h = 0.02f;
 
     float gravity = -9.81f;
@@ -37,8 +37,17 @@ struct Scene {
         int n = fluid->numY;
         int &numX = fluid->numX;
         int &numY = fluid->numY;
-        
-        if (sceneNr == 1 || sceneNr == 3) { // vortex shedding
+        if (sceneNr == 0) {                       // tank
+            for (int i = 0; i < numX; i++) {
+                for (int j = 0; j < numY; j++) {
+                    float s = 1.0f; // fluid
+                    if (i == 0 || i == numX-1 || j == 0) {
+                        fluid->s[i*n + j] = s;
+                    }
+                }
+            }
+        }
+        else if (sceneNr == 1 || sceneNr == 3) {  // vortex shedding
             float inVel = 2.0f;
             for (int i = 0; i < numX; i++) {
                 for (int j = 0; j < numY; j++) {
@@ -73,6 +82,15 @@ struct Scene {
                 dt = 1.0f / 120.0f;
                 numIters = 100;
                 showPressure = true;
+            } else if (sceneNr == 2) { //paint
+
+                gravity = 0.0f;
+                overRelaxation = 1.0f;
+                showPressure = false;
+                showSmoke = true;
+                showStreamlines = false;
+                showVelocities = false;
+                obstacleRadius = 0.1f;
             }
         }
     }
@@ -131,7 +149,6 @@ int winWidth, winHeight;
 
 Scene scene;
 
-
 string readShaderFile(const std::string& filepath) {
     ifstream file(filepath);
     if (!file.is_open()) {
@@ -187,7 +204,7 @@ GLuint createShaderProgram(const char* vertexSource, const char* fragmentSource)
         return 0;
     }
 
-    // ---------- Cleanup: Shader objects are no longer needed ----------
+    // Cleanup: Shader objects are no longer needed
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
