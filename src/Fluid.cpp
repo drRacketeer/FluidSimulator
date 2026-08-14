@@ -113,6 +113,7 @@ float Fluid::sampleField(float x, float y, Field field) {
         case U_FIELD: f = &this->u; dy = h2; break;
         case V_FIELD: f = &this->v; dx = h2; break;
         case S_FIELD: f = &this->m; dx = h2; dy = h2; break;
+        default: return 0.0f;
     }
     float x0 = min(floor((x-dx)*h1), this->numX-1.0f);
     float tx = ((x-dx) - x0 * h) * h1;
