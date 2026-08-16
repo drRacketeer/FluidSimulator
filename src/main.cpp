@@ -6,13 +6,16 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 // Setting up a Scene struct
 struct Scene {
     // Fluid param
     float density = 1000.0f;
     // initial numX and numY without +2 ghostcells
-    int numX = 140;
-    int numY = 80;
+    int numX = 100;
+    int numY = 60;
     float h = 0.02f;
 
     float gravity = -9.81f;
@@ -325,11 +328,26 @@ int main() {
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, cursor_pos_callback);
     
+    // ImGui Setup
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGui::StyleColorsDark();
 
+    // Init backends
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
+    
     while (!glfwWindowShouldClose(window)) {
         // Viewport fix every frame
         glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
         glViewport(0, 0, fbWidth, fbHeight);
+
+        glfwPollEvents();
+        // ImGui New Frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
         // 1. Simulate one step
         scene.simulateFluid();
@@ -338,15 +356,34 @@ int main() {
         // numX and numY are also swapped here to make it comform to the way it reads the fluid vectors
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numY, scene.fluid->numX, GL_RED, GL_FLOAT, scene.fluid->m.data());
         
+        // A simple ImGui window
+        ImGui::Begin("My First Window");
+        ImGui::Text("Hello, ImGui!");
+        ImGui::Text("FPS: %.1f", io.Framerate);
+        if (ImGui::Button("Click me")) {
+            std::cout << "Button clicked!\n";
+        }
+        ImGui::End();
+
         // 3. Render
         glClear(GL_COLOR_BUFFER_BIT);
         glUseProgram(program);
         glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        // Render ImGui overlay (after your quad)
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        
         // 4. Swap and poll
         glfwSwapBuffers(window);
-        glfwPollEvents();
     }
+
+    // ImGui cleanup
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
     return 0;
 }
