@@ -9,13 +9,16 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+
+
+
 // Setting up a Scene struct
 struct Scene {
     // Fluid param
     float density = 1000.0f;
     // initial numX and numY without +2 ghostcells
-    int numX = 100;
-    int numY = 60;
+    int numX = 80;
+    int numY = 80;
     float h = 0.02f;
 
     float gravity = -9.81f;
@@ -144,13 +147,44 @@ struct Scene {
         showObstacle = true;
     }
 };
+Scene scene;
 
+
+void renderUi(ImGuiIO imGuiIo){
+    // Set up the top bar
+    ImGui::SetNextWindowPos(ImVec2(0, 0));                              // position at top-left corner
+    ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, 40)); // full width, fixed height
+
+    ImGui::Begin("TopBar", nullptr,
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoScrollbar
+    );
+
+    // Make the background semi‑transparent (optional)
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.1f, 0.1f, 0.1f, 0.1f)); 
+    
+    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) scene.setupScene(scene.sceneNr);
+    ImGui::SameLine();
+    ImGui::Checkbox("Show Streamlines", &scene.showStreamlines);
+    ImGui::SameLine();
+    ImGui::Checkbox("Show Velocities", &scene.showVelocities);
+    ImGui::SameLine();
+    ImGui::Checkbox("Show Pressure", &scene.showPressure);
+    ImGui::SameLine();
+    ImGui::Checkbox("Show Smoke", &scene.showSmoke);
+
+    ImGui::PopStyleColor(); // restore default window bg color
+    ImGui::End();
+}
 // bool for checking if mouse is pressed
 bool mousePressed = false;
 int fbWidth, fbHeight;
 int winWidth, winHeight;
 
-Scene scene;
 
 string readShaderFile(const std::string& filepath) {
     ifstream file(filepath);
@@ -223,8 +257,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
             double mx, my;
             glfwGetCursorPos(window, &mx, &my);
             // convert and call setObstacle with reset=true
-            float physX = (float)mx / winWidth * (scene->numX * scene->h);
-            float physY = (float)(winHeight - my) / winHeight * (scene->numY * scene->h);
+            float physX = (float)mx / winWidth * (scene->fluid->numX * scene->h);
+            float physY = (float)(winHeight - my) / winHeight * (scene->fluid->numY * scene->h);
             scene->setObstacle(physX, physY, true);
         } else if (action == GLFW_RELEASE) {
             mousePressed = false;
@@ -254,7 +288,7 @@ int main() {
     
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    GLFWwindow* window = glfwCreateWindow(1200, 800, "Fluid Simulation", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(900, 900, "Fluid Simulation", nullptr, nullptr);
     glfwMakeContextCurrent(window);
     glfwSetWindowUserPointer(window, &scene);
     
@@ -328,22 +362,24 @@ int main() {
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, cursor_pos_callback);
     
+
     // ImGui Setup
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGuiIO& imGuiIo = ImGui::GetIO(); (void)imGuiIo;
     ImGui::StyleColorsDark();
 
     // Init backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
-    
+
     while (!glfwWindowShouldClose(window)) {
         // Viewport fix every frame
         glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
         glViewport(0, 0, fbWidth, fbHeight);
 
         glfwPollEvents();
+
         // ImGui New Frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -356,14 +392,6 @@ int main() {
         // numX and numY are also swapped here to make it comform to the way it reads the fluid vectors
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numY, scene.fluid->numX, GL_RED, GL_FLOAT, scene.fluid->m.data());
         
-        // A simple ImGui window
-        ImGui::Begin("My First Window");
-        ImGui::Text("Hello, ImGui!");
-        ImGui::Text("FPS: %.1f", io.Framerate);
-        if (ImGui::Button("Click me")) {
-            std::cout << "Button clicked!\n";
-        }
-        ImGui::End();
 
         // 3. Render
         glClear(GL_COLOR_BUFFER_BIT);
@@ -371,6 +399,9 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        // ImGui UI render
+        renderUi(imGuiIo);
 
         // Render ImGui overlay (after your quad)
         ImGui::Render();
