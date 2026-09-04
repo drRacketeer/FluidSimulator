@@ -17,8 +17,8 @@ struct Scene {
     // Fluid param
     float density = 1000.0f;
     // initial numX and numY without +2 ghostcells
-    int numX = 80;
-    int numY = 80;
+    int numX = 100;
+    int numY = 100;
     float h = 0.02f;
 
     float gravity = -9.81f;
@@ -37,6 +37,8 @@ struct Scene {
     bool showPressure = false;
     bool showSmoke = true;
     Fluid* fluid = nullptr;
+    GLuint velTexA, velTexB;
+    GLuint smokeTexA, smokeTexB;
 
     void setupScene(int sceneNr = 1){
         fluid = new Fluid(density, numX, numY, h);
@@ -247,7 +249,40 @@ GLuint createShaderProgram(const char* vertexSource, const char* fragmentSource)
 
     return program;
 }
+GLuint createComputeProgram(const char* computeSource) {
+    GLuint shader = glCreateShader(GL_COMPUTE_SHADER);
+    glShaderSource(shader, 1, &computeSource, nullptr);
+    glCompileShader(shader);
 
+    // Check compile errors
+    int success;
+    char infoLog[512];
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+        std::cerr << "ERROR::COMPUTE_SHADER::COMPILATION_FAILED\n" << infoLog << std::endl;
+        glDeleteShader(shader);
+        return 0;
+    }
+
+    // Link program
+    GLuint program = glCreateProgram();
+    glAttachShader(program, shader);
+    glLinkProgram(program);
+    
+    // Check link errors
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(program, 512, nullptr, infoLog);
+        std::cerr << "ERROR::COMPUTE_PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+        glDeleteShader(shader);
+        glDeleteProgram(program);
+        return 0;
+    }
+
+    glDeleteShader(shader);
+    return program;
+}
 // Mouse button callback:
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
@@ -278,11 +313,12 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
 int main() {
     
     scene.setupScene();
-    
-    // Init Fluid Object
+    int gridW = scene.fluid->numX;
+    int gridH = scene.fluid->numY;
+
     // STEP 1 Init OpenGL
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     
@@ -308,6 +344,52 @@ int main() {
     
     // Color for debugging incase something happens with the view
     glClearColor(0.0f, 1.0f, 0.0f, 1.0f); // Bright green
+    
+    // Creating RGBA Textures for the compute shader
+    // This one is for the velocity
+    glGenTextures(1, &scene.velTexA);
+    glBindTexture(GL_TEXTURE_2D, scene.velTexA);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenTextures(1, &scene.velTexB);
+    glBindTexture(GL_TEXTURE_2D, scene.velTexB);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // This one is for the smoke
+    glGenTextures(1, &scene.smokeTexA);
+    glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    glGenTextures(1, &scene.smokeTexB);
+    glBindTexture(GL_TEXTURE_2D, scene.smokeTexB);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Pack u and v into a single array of floats for upload
+    std::vector<float> packedUV(2 * scene.fluid->numCells);
+    for (int i = 0; i < scene.fluid->numCells; ++i) {
+        packedUV[2*i + 0] = scene.fluid->u[i];
+        packedUV[2*i + 1] = scene.fluid->v[i];
+    }
+
+    glBindTexture(GL_TEXTURE_2D, scene.velTexA);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RG, GL_FLOAT, packedUV.data());
+
+    // Upload smoke
+    glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->m.data());
+
     // Step 2 Create 2D Texture to hold the simulation data
     GLuint texture;
     glGenTextures(1, &texture);

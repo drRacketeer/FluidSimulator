@@ -1,0 +1,83 @@
+#version 430 core
+
+layout(local_size_x = 16, local_size_y = 16) in;  // work group size: 16x16 threads
+
+// Input textures (previous frame's data)
+layout(binding = 0, rgba32f) uniform image2D u_velIn;
+layout(binding = 1, r32f)    uniform image2D u_smokeIn;
+
+// Output textures (new data)
+layout(binding = 2, rgba32f) uniform image2D u_velOut;
+layout(binding = 3, r32f)    uniform image2D u_smokeOut;
+
+uniform float u_dt;      // time step
+uniform float u_h;       // grid spacing
+uniform vec2  u_res;     // (gridW, gridH) in floats
+
+// Helper: sample a texture with bilinear filtering at physical coordinates (x,y)
+float sampleSmoke(sampler2D tex, vec2 coord) {
+    // coord is in [0,1] texture space
+    return texture(tex, coord).r;
+}
+vec2 sampleVelocity(sampler2D tex, vec2 coord) {
+    return texture(tex, coord).rg;
+}
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (pos.x >= int(u_res.x) || pos.y >= int(u_res.y)) return;  // out of bounds
+
+    // 1. Convert grid index to physical coordinates (cell center)
+    vec2 phys = (vec2(pos) + 0.5) * u_h;
+
+    // 2. Read velocity at this cell (from input texture)
+    vec2 vel = imageLoad(u_velIn, pos).rg;
+
+    // 3. Backward trace (semi-Lagrangian)
+    vec2 prevPhys = phys - u_dt * vel;
+
+    // 4. Convert to texture coordinates [0,1]
+    vec2 texCoord = prevPhys / (u_res * u_h);   // domain size = u_res * u_h
+
+    // 5. Sample velocity at the traced position (bilinear interpolation)
+    // We need a sampler object for the input texture. Instead of using texture(),
+    // we can use imageLoad with manual bilinear, but it's easier to use a sampler.
+    // However, image2D cannot be sampled with texture() – we need a separate sampler2D uniform.
+    // So we'll pass the input textures as sampler2D uniforms as well.
+    // For simplicity, we'll use imageLoad and do manual bilinear interpolation.
+    // Let's compute the four neighbouring cells.
+    vec2 gridCoord = prevPhys / u_h;  // in cell units (non-integer)
+    ivec2 base = ivec2(floor(gridCoord));
+    vec2 frac = gridCoord - floor(gridCoord);
+
+    // Clamp to valid range (handle boundaries)
+    ivec2 c00 = clamp(base, ivec2(0,0), ivec2(u_res-1));
+    ivec2 c10 = clamp(base + ivec2(1,0), ivec2(0,0), ivec2(u_res-1));
+    ivec2 c01 = clamp(base + ivec2(0,1), ivec2(0,0), ivec2(u_res-1));
+    ivec2 c11 = clamp(base + ivec2(1,1), ivec2(0,0), ivec2(u_res-1));
+
+    vec2 v00 = imageLoad(u_velIn, c00).rg;
+    vec2 v10 = imageLoad(u_velIn, c10).rg;
+    vec2 v01 = imageLoad(u_velIn, c01).rg;
+    vec2 v11 = imageLoad(u_velIn, c11).rg;
+
+    // Bilinear interpolation of velocity
+    vec2 vx0 = mix(v00, v10, frac.x);
+    vec2 vx1 = mix(v01, v11, frac.x);
+    vec2 newVel = mix(vx0, vx1, frac.y);
+
+    // Write advected velocity to output
+    imageStore(u_velOut, pos, vec4(newVel, 0.0, 0.0));
+
+    // ---- Now advect smoke ----
+    float s00 = imageLoad(u_smokeIn, c00).r;
+    float s10 = imageLoad(u_smokeIn, c10).r;
+    float s01 = imageLoad(u_smokeIn, c01).r;
+    float s11 = imageLoad(u_smokeIn, c11).r;
+
+    float sx0 = mix(s00, s10, frac.x);
+    float sx1 = mix(s01, s11, frac.x);
+    float newSmoke = mix(sx0, sx1, frac.y);
+
+    imageStore(u_smokeOut, pos, vec4(newSmoke, 0.0, 0.0));
+}
