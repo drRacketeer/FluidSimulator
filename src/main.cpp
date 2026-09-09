@@ -389,7 +389,7 @@ int main() {
     // Upload smoke
     glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->m.data());
-
+    /*
     // Step 2 Create 2D Texture to hold the simulation data
     GLuint texture;
     glGenTextures(1, &texture);
@@ -399,13 +399,15 @@ int main() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
     // Allocate storage for the texture on GPU (initially zero)
     // numX and numY are also swapped to make it comform to the way it reads the fluid vectors
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, scene.fluid->numY, scene.fluid->numX, 0, GL_RED, GL_FLOAT, nullptr);
+    */
     // Step 3 Build
     string vertexSrc = readShaderFile("src/vertex.glsl");
     string fragmentSrc = readShaderFile("src/fragment.glsl");
+    string advectComputeSrc = readShaderFile("src/advect.comp");
+    GLuint advectComputeProgram = createComputeProgram(advectComputeSrc.c_str());
     GLuint program = createShaderProgram(vertexSrc.c_str(), fragmentSrc.c_str());
     
     // Step 4 Setup full quad VAO
@@ -453,7 +455,7 @@ int main() {
 
     // Init backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    ImGui_ImplOpenGL3_Init("#version 430");
 
     while (!glfwWindowShouldClose(window)) {
         // Viewport fix every frame
@@ -467,6 +469,51 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        glUseProgram(advectComputeProgram);
+
+        // Set uniforms
+        glUniform1f(glGetUniformLocation(advectComputeProgram, "u_dt"), scene.dt);
+        glUniform1f(glGetUniformLocation(advectComputeProgram, "u_h"), scene.fluid->h);
+        glUniform2f(glGetUniformLocation(advectComputeProgram, "u_res"), (float)gridW, (float)gridH);
+
+        // --- Bind input textures as samplers ---
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, scene.velTexA);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
+
+        glUniform1i(glGetUniformLocation(advectComputeProgram, "u_velSampler"), 0);
+        glUniform1i(glGetUniformLocation(advectComputeProgram, "u_smokeSampler"), 1);
+
+        // --- Bind output textures as images (write‑only) ---
+        glBindImageTexture(0, scene.velTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+        glBindImageTexture(1, scene.smokeTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+
+
+        GLuint groupsX = (gridW + 15) / 16;
+        GLuint groupsY = (gridH + 15) / 16;
+        glDispatchCompute(groupsX, groupsY, 1);
+
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+        // Swap textures (now velTexA and smokeTexA hold the new state)
+        std::swap(scene.velTexA, scene.velTexB);
+        std::swap(scene.smokeTexA, scene.smokeTexB);
+
+        // ---- Rendering ----
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // Use the rendering shader program
+        glUseProgram(program);
+        // Bind the GPU smoke texture instead of the old CPU texture
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
+        // (If you have uniforms for the texture, set them)
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        // Old CPU bound simulation
+        /*
         // 1. Simulate one step
         scene.simulateFluid();
         // 2. Upload the scalar field you want to visualize (e.g., smoke density 'm')
@@ -481,7 +528,7 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
-
+        */
         // ImGui UI render
         renderUi(imGuiIo);
 
