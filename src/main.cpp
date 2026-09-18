@@ -37,7 +37,10 @@ struct Scene {
     bool showPressure = false;
     bool showSmoke = true;
     Fluid* fluid = nullptr;
-    GLuint velTexA, velTexB;
+    GLuint uTexA, uTexB;
+    GLuint vTexA, vTexB;
+    GLuint pTexA, pTexB;
+    GLuint solidTex;
     GLuint smokeTexA, smokeTexB;
 
     void setupScene(int sceneNr = 1){
@@ -150,6 +153,9 @@ struct Scene {
     }
 };
 Scene scene;
+// NumX and NumY with the +2 ghost cells
+int gridW = 0;
+int gridH = 0;
 
 
 void renderUi(ImGuiIO imGuiIo){
@@ -295,7 +301,16 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
             float physX = (float)mx / winWidth * (scene->fluid->numX * scene->h);
             float physY = (float)(winHeight - my) / winHeight * (scene->fluid->numY * scene->h);
             scene->setObstacle(physX, physY, true);
-        } else if (action == GLFW_RELEASE) {
+            glBindTexture(GL_TEXTURE_2D, scene->solidTex);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene->fluid->s.data());
+
+            glBindTexture(GL_TEXTURE_2D, scene->uTexA);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene->fluid->u.data());
+
+            glBindTexture(GL_TEXTURE_2D, scene->vTexA);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene->fluid->v.data());
+        } 
+        else if (action == GLFW_RELEASE) {
             mousePressed = false;
         }
     }
@@ -308,13 +323,19 @@ void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
         float physX = (float)xpos / winWidth * (scene->numX * scene->h);
         float physY = (float)(winHeight - ypos) / winHeight * (scene->numY * scene->h);
         scene->setObstacle(physX, physY, false); // reset=false to compute velocity
+        glBindTexture(GL_TEXTURE_2D, scene->solidTex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene->fluid->s.data());
+        glBindTexture(GL_TEXTURE_2D, scene->uTexA);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene->fluid->u.data());
+        glBindTexture(GL_TEXTURE_2D, scene->vTexA);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene->fluid->v.data());
     }
 }
 int main() {
     
     scene.setupScene();
-    int gridW = scene.fluid->numX;
-    int gridH = scene.fluid->numY;
+    gridW = scene.fluid->numX;
+    gridH = scene.fluid->numY;
 
     // STEP 1 Init OpenGL
     glfwInit();
@@ -345,23 +366,8 @@ int main() {
     // Color for debugging incase something happens with the view
     glClearColor(0.0f, 1.0f, 0.0f, 1.0f); // Bright green
     
+    // Step 2 Create 2D Texture to hold the simulation data
     // Creating RGBA Textures for the compute shader
-    // This one is for the velocity
-    glGenTextures(1, &scene.velTexA);
-    glBindTexture(GL_TEXTURE_2D, scene.velTexA);
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, gridW, gridH);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glGenTextures(1, &scene.velTexB);
-    glBindTexture(GL_TEXTURE_2D, scene.velTexB);
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, gridW, gridH);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     // This one is for the smoke
     glGenTextures(1, &scene.smokeTexA);
     glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
@@ -369,28 +375,101 @@ int main() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    
+
     glGenTextures(1, &scene.smokeTexB);
     glBindTexture(GL_TEXTURE_2D, scene.smokeTexB);
     glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    // Pack u and v into a single array of floats for upload
-    std::vector<float> packedUV(2 * scene.fluid->numCells);
-    for (int i = 0; i < scene.fluid->numCells; ++i) {
-        packedUV[2*i + 0] = scene.fluid->u[i];
-        packedUV[2*i + 1] = scene.fluid->v[i];
-    }
 
-    glBindTexture(GL_TEXTURE_2D, scene.velTexA);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RG, GL_FLOAT, packedUV.data());
+    // u textures
+    glGenTextures(1, &scene.uTexA);
+    glBindTexture(GL_TEXTURE_2D, scene.uTexA);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    // Upload smoke
+    glGenTextures(1, &scene.uTexB);
+    glBindTexture(GL_TEXTURE_2D, scene.uTexB);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // v textures
+    glGenTextures(1, &scene.vTexA);
+    glBindTexture(GL_TEXTURE_2D, scene.vTexA);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenTextures(1, &scene.vTexB);
+    glBindTexture(GL_TEXTURE_2D, scene.vTexB);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // pressure textures
+    glGenTextures(1, &scene.pTexA);
+    glBindTexture(GL_TEXTURE_2D, scene.pTexA);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenTextures(1, &scene.pTexB);
+    glBindTexture(GL_TEXTURE_2D, scene.pTexB);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // solid texture
+    glGenTextures(1, &scene.solidTex);
+    glBindTexture(GL_TEXTURE_2D, scene.solidTex);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, gridW, gridH);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Clear garbage values just in case
+    std::vector<float> zeros(scene.fluid->numCells, 0.0f);
+
+    glBindTexture(GL_TEXTURE_2D, scene.pTexA);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, zeros.data());
+    glBindTexture(GL_TEXTURE_2D, scene.pTexB);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, zeros.data());
+    glBindTexture(GL_TEXTURE_2D, scene.smokeTexB);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, zeros.data());
+    glBindTexture(GL_TEXTURE_2D, scene.uTexB);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, zeros.data());
+    glBindTexture(GL_TEXTURE_2D, scene.vTexB);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, zeros.data());
+
+    // Upload textures
+    glBindTexture(GL_TEXTURE_2D, scene.uTexA);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->u.data());
+
+    glBindTexture(GL_TEXTURE_2D, scene.vTexA);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->v.data());
+
+    glBindTexture(GL_TEXTURE_2D, scene.solidTex);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->s.data());
+
     glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->m.data());
     /*
-    // Step 2 Create 2D Texture to hold the simulation data
     GLuint texture;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -406,10 +485,14 @@ int main() {
     // Step 3 Build
     string vertexSrc = readShaderFile("src/vertex.glsl");
     string fragmentSrc = readShaderFile("src/fragment.glsl");
-    string advectComputeSrc = readShaderFile("src/advect.comp");
-    GLuint advectComputeProgram = createComputeProgram(advectComputeSrc.c_str());
+    string forcesComputeSrc = readShaderFile("src/forces.comp");
+    string pressureComputeSrc = readShaderFile("src/pressure.comp");
+    string projectComputeSrc = readShaderFile("src/project.comp");
+
     GLuint program = createShaderProgram(vertexSrc.c_str(), fragmentSrc.c_str());
-    
+    GLuint forcesComputeProgram = createComputeProgram(forcesComputeSrc.c_str());
+    GLuint pressureComputeProgram = createComputeProgram(pressureComputeSrc.c_str());
+    GLuint projectComputeProgram = createComputeProgram(projectComputeSrc.c_str());
     // Step 4 Setup full quad VAO
     float vertices[] = {
     // positions      // texCoords
@@ -469,40 +552,83 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        glUseProgram(advectComputeProgram);
+        // Step 1: Forces (gravity + vorticity confinement)
+        glUseProgram(forcesComputeProgram);
+        glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_dt"), scene.dt);
+        glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_gravity"), scene.gravity);
+        glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_vorticityConfinement"), 0.2f);
+        glUniform2f(glGetUniformLocation(forcesComputeProgram, "u_res"), (float)gridW, (float)gridH);
+        glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_h"), scene.fluid->h);
 
-        // Set uniforms
-        glUniform1f(glGetUniformLocation(advectComputeProgram, "u_dt"), scene.dt);
-        glUniform1f(glGetUniformLocation(advectComputeProgram, "u_h"), scene.fluid->h);
-        glUniform2f(glGetUniformLocation(advectComputeProgram, "u_res"), (float)gridW, (float)gridH);
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, scene.uTexA);
+        glUniform1i(glGetUniformLocation(forcesComputeProgram, "u_sampler"), 0);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, scene.vTexA);
+        glUniform1i(glGetUniformLocation(forcesComputeProgram, "v_sampler"), 1);
+        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, scene.solidTex);
+        glUniform1i(glGetUniformLocation(forcesComputeProgram, "solid_sampler"), 2);
 
-        // --- Bind input textures as samplers ---
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, scene.velTexA);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
+        glBindImageTexture(0, scene.uTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+        glBindImageTexture(1, scene.vTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
 
-        glUniform1i(glGetUniformLocation(advectComputeProgram, "u_velSampler"), 0);
-        glUniform1i(glGetUniformLocation(advectComputeProgram, "u_smokeSampler"), 1);
-
-        // --- Bind output textures as images (write‑only) ---
-        glBindImageTexture(0, scene.velTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-        glBindImageTexture(1, scene.smokeTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
-
-
-        GLuint groupsX = (gridW + 15) / 16;
-        GLuint groupsY = (gridH + 15) / 16;
-        glDispatchCompute(groupsX, groupsY, 1);
-
+        glDispatchCompute((gridW-2 + 15)/16, (gridH-2 + 15)/16, 1);
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        std::swap(scene.uTexA, scene.uTexB);
+        std::swap(scene.vTexA, scene.vTexB);
 
-        // Swap textures (now velTexA and smokeTexA hold the new state)
-        std::swap(scene.velTexA, scene.velTexB);
-        std::swap(scene.smokeTexA, scene.smokeTexB);
+        // Step 2: Pressure Solves (SOR iterations)
+        for (int iter = 0; iter < scene.numIters; ++iter) {
+            glUseProgram(pressureComputeProgram);
+            glUniform1f(glGetUniformLocation(pressureComputeProgram, "u_h"), scene.fluid->h);
+            glUniform1f(glGetUniformLocation(pressureComputeProgram, "u_density"), scene.density);
+            glUniform1f(glGetUniformLocation(pressureComputeProgram, "u_dt"), scene.dt);
+            glUniform1f(glGetUniformLocation(pressureComputeProgram, "u_overRelaxation"), scene.overRelaxation);
+            glUniform2f(glGetUniformLocation(pressureComputeProgram, "u_res"), (float)gridW, (float)gridH);
 
-        // ---- Rendering ----
+            glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, scene.uTexA);
+            glUniform1i(glGetUniformLocation(pressureComputeProgram, "u_sampler"), 0);
+            glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, scene.vTexA);
+            glUniform1i(glGetUniformLocation(pressureComputeProgram, "v_sampler"), 1);
+            glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, scene.pTexA);
+            glUniform1i(glGetUniformLocation(pressureComputeProgram, "p_sampler"), 2);
+            glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, scene.solidTex);
+            glUniform1i(glGetUniformLocation(pressureComputeProgram, "solid_sampler"), 3);
+
+            glBindImageTexture(0, scene.pTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+
+            glDispatchCompute((gridW-2 + 15)/16, (gridH-2 + 15)/16, 1);
+            glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+            std::swap(scene.pTexA, scene.pTexB);
+        }
+        
+        // Step 3: Subtract Pressure Gradient (project)
+        glUseProgram(projectComputeProgram);
+        glUniform1f(glGetUniformLocation(projectComputeProgram, "u_h"), scene.fluid->h);
+        glUniform1f(glGetUniformLocation(projectComputeProgram, "u_density"), scene.density);
+        glUniform1f(glGetUniformLocation(projectComputeProgram, "u_dt"), scene.dt);
+        glUniform2f(glGetUniformLocation(projectComputeProgram, "u_res"), (float)gridW, (float)gridH);
+
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, scene.uTexA);
+        glUniform1i(glGetUniformLocation(projectComputeProgram, "u_sampler"), 0);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, scene.vTexA);
+        glUniform1i(glGetUniformLocation(projectComputeProgram, "v_sampler"), 1);
+        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, scene.pTexA);
+        glUniform1i(glGetUniformLocation(projectComputeProgram, "p_sampler"), 2);
+        glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, scene.solidTex);
+        glUniform1i(glGetUniformLocation(projectComputeProgram, "solid_sampler"), 3);
+
+        glBindImageTexture(0, scene.uTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+        glBindImageTexture(1, scene.vTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+
+        glDispatchCompute((gridW-2 + 15)/16, (gridH-2 + 15)/16, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        std::swap(scene.uTexA, scene.uTexB);
+        std::swap(scene.vTexA, scene.vTexB);
+        // Step 4: Advect Velocity
+
+        // STEP 5: Advect Smoke
+
+        // Rendering
         glClear(GL_COLOR_BUFFER_BIT);
-
         // Use the rendering shader program
         glUseProgram(program);
         // Bind the GPU smoke texture instead of the old CPU texture
@@ -532,7 +658,7 @@ int main() {
         // ImGui UI render
         renderUi(imGuiIo);
 
-        // Render ImGui overlay (after your quad)
+        // Render ImGui overlay
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         

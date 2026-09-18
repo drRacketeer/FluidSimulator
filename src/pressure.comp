@@ -1,0 +1,53 @@
+#version 430 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+uniform sampler2D u_sampler;
+uniform sampler2D v_sampler;
+uniform sampler2D p_sampler;
+uniform sampler2D solid_sampler;
+
+layout(binding = 0, r32f) uniform image2D p_out;
+
+uniform float u_h;
+uniform float u_density;
+uniform float u_dt;
+uniform float u_overRelaxation;
+uniform vec2  u_res;
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy) + ivec2(1, 1);
+
+    float solid = texelFetch(solid_sampler, pos, 0).r;
+    float pC = texelFetch(p_sampler, pos, 0).r;
+
+    if (solid == 0.0) {
+        imageStore(p_out, pos, vec4(pC));
+        return;
+    }
+
+    float sL = texelFetch(solid_sampler, pos - ivec2(1,0), 0).r;
+    float sR = texelFetch(solid_sampler, pos + ivec2(1,0), 0).r;
+    float sD = texelFetch(solid_sampler, pos - ivec2(0,1), 0).r;
+    float sU = texelFetch(solid_sampler, pos + ivec2(0,1), 0).r;
+    float sSum = sL + sR + sD + sU;
+    if (sSum == 0.0) {
+        imageStore(p_out, pos, vec4(pC));
+        return;
+    }
+
+    // Divergence
+    float uC = texelFetch(u_sampler, pos,               0).r;
+    float uR = texelFetch(u_sampler, pos + ivec2(1,0),  0).r;
+    float vC = texelFetch(v_sampler, pos,               0).r;
+    float vU = texelFetch(v_sampler, pos + ivec2(0,1),  0).r;
+
+    float div = (uR - uC) + (vU - vC);
+
+    // SOR pressure update
+    float cp = u_density * u_h / u_dt;
+    float pCorr = -div / sSum * u_overRelaxation;
+    float newP = pC + cp * pCorr;
+
+    imageStore(p_out, pos, vec4(newP));
+}

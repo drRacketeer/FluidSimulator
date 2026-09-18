@@ -1,0 +1,70 @@
+#version 430 core
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+uniform sampler2D u_sampler;
+uniform sampler2D v_sampler;
+uniform sampler2D solid_sampler;
+
+layout(binding = 0, r32f) uniform image2D u_out;
+layout(binding = 1, r32f) uniform image2D v_out;
+
+uniform float u_dt;
+uniform float u_gravity;
+uniform float u_vorticityConfinement;
+uniform vec2  u_res;
+uniform float u_h;
+
+// Helper: compute vorticity at a given cell (clamped)
+float computeOmega(ivec2 p) {
+    ivec2 res = ivec2(u_res);
+    ivec2 pR = clamp(p + ivec2(1,0), ivec2(0), res - 1);
+    ivec2 pL = clamp(p - ivec2(1,0), ivec2(0), res - 1);
+    ivec2 pU = clamp(p + ivec2(0,1), ivec2(0), res - 1);
+    ivec2 pD = clamp(p - ivec2(0,1), ivec2(0), res - 1);
+
+    float vR = texelFetch(v_sampler, pR, 0).r;
+    float vL = texelFetch(v_sampler, pL, 0).r;
+    float uU = texelFetch(u_sampler, pU, 0).r;
+    float uD = texelFetch(u_sampler, pD, 0).r;
+
+    return (vR - vL - (uU - uD)) / (2.0 * u_h);
+}
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (pos.x >= int(u_res.x) || pos.y >= int(u_res.y)) return;
+
+    float solid = texelFetch(solid_sampler, pos, 0).r;
+    if (solid == 0.0) {
+        imageStore(u_out, pos, vec4(0.0));
+        imageStore(v_out, pos, vec4(0.0));
+        return;
+    }
+
+    float u = texelFetch(u_sampler, pos, 0).r;
+    float v = texelFetch(v_sampler, pos, 0).r;
+
+    // Gravity
+    v += u_gravity * u_dt;
+
+    // Vorticity confinement
+    float omega = computeOmega(pos);
+    float omegaR = computeOmega(pos + ivec2(1,0));
+    float omegaL = computeOmega(pos - ivec2(1,0));
+    float omegaU = computeOmega(pos + ivec2(0,1));
+    float omegaD = computeOmega(pos - ivec2(0,1));
+
+    vec2 gradOmega = vec2(omegaR - omegaL, omegaU - omegaD) / (2.0 * u_h);
+    float mag = length(gradOmega);
+    if (mag > 1e-6) {
+        vec2 dir = gradOmega / mag;
+        // Cross product in 2D: (dir.x, dir.y) × omega => (omega * dir.y, -omega * dir.x)
+        vec2 confinementForce = u_vorticityConfinement * vec2(omega * dir.y, -omega * dir.x);
+        u += confinementForce.x * u_dt;
+        v += confinementForce.y * u_dt;
+    }
+
+    imageStore(u_out, pos, vec4(u, 0.0, 0.0, 0.0));
+    imageStore(v_out, pos, vec4(v, 0.0, 0.0, 0.0));
+}
