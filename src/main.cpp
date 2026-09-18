@@ -488,11 +488,16 @@ int main() {
     string forcesComputeSrc = readShaderFile("src/forces.comp");
     string pressureComputeSrc = readShaderFile("src/pressure.comp");
     string projectComputeSrc = readShaderFile("src/project.comp");
+    string advectVelComputeSrc = readShaderFile("src/advect_vel.comp");
+    string advectSmokeComputeSrc= readShaderFile("src/advect_smoke.comp");
 
     GLuint program = createShaderProgram(vertexSrc.c_str(), fragmentSrc.c_str());
     GLuint forcesComputeProgram = createComputeProgram(forcesComputeSrc.c_str());
     GLuint pressureComputeProgram = createComputeProgram(pressureComputeSrc.c_str());
     GLuint projectComputeProgram = createComputeProgram(projectComputeSrc.c_str());
+    GLuint advectVelComputeProgram = createComputeProgram(advectVelComputeSrc.c_str());
+    GLuint advectSmokeComputeProgram = createComputeProgram(advectSmokeComputeSrc.c_str());
+
     // Step 4 Setup full quad VAO
     float vertices[] = {
     // positions      // texCoords
@@ -623,9 +628,48 @@ int main() {
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
         std::swap(scene.uTexA, scene.uTexB);
         std::swap(scene.vTexA, scene.vTexB);
+        
         // Step 4: Advect Velocity
+        glUseProgram(advectVelComputeProgram);
+        glUniform1f(glGetUniformLocation(advectVelComputeProgram, "u_dt"), scene.dt);
+        glUniform1f(glGetUniformLocation(advectVelComputeProgram, "u_h"), scene.fluid->h);
+        glUniform2f(glGetUniformLocation(advectVelComputeProgram, "u_res"), (float)gridW, (float)gridH);
+
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, scene.uTexA);
+        glUniform1i(glGetUniformLocation(advectVelComputeProgram, "u_sampler"), 0);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, scene.vTexA);
+        glUniform1i(glGetUniformLocation(advectVelComputeProgram, "v_sampler"), 1);
+        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, scene.solidTex);
+        glUniform1i(glGetUniformLocation(advectVelComputeProgram, "solid_sampler"), 2);
+
+        glBindImageTexture(0, scene.uTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+        glBindImageTexture(1, scene.vTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+
+        glDispatchCompute((gridW-2 + 15)/16, (gridH-2 + 15)/16, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        std::swap(scene.uTexA, scene.uTexB);
+        std::swap(scene.vTexA, scene.vTexB);
 
         // STEP 5: Advect Smoke
+        glUseProgram(advectSmokeComputeProgram);
+        glUniform1f(glGetUniformLocation(advectSmokeComputeProgram, "u_dt"), scene.dt);
+        glUniform1f(glGetUniformLocation(advectSmokeComputeProgram, "u_h"), scene.fluid->h);
+        glUniform2f(glGetUniformLocation(advectSmokeComputeProgram, "u_res"), (float)gridW, (float)gridH);
+
+        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, scene.uTexA);
+        glUniform1i(glGetUniformLocation(advectSmokeComputeProgram, "u_sampler"), 0);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, scene.vTexA);
+        glUniform1i(glGetUniformLocation(advectSmokeComputeProgram, "v_sampler"), 1);
+        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
+        glUniform1i(glGetUniformLocation(advectSmokeComputeProgram, "smoke_sampler"), 2);
+        glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, scene.solidTex);
+        glUniform1i(glGetUniformLocation(advectSmokeComputeProgram, "solid_sampler"), 3);
+
+        glBindImageTexture(0, scene.smokeTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+
+        glDispatchCompute((gridW-2 + 15)/16, (gridH-2 + 15)/16, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+        std::swap(scene.smokeTexA, scene.smokeTexB);
 
         // Rendering
         glClear(GL_COLOR_BUFFER_BIT);
