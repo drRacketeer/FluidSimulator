@@ -17,6 +17,7 @@ uniform vec2  u_res;
 
 void main() {
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy) + ivec2(1, 1);
+    if (pos.x > int(u_res.x) - 2 || pos.y > int(u_res.y) - 2) return;
 
     float solid = texelFetch(solid_sampler, pos, 0).r;
     float pC = texelFetch(p_sampler, pos, 0).r;
@@ -36,18 +37,28 @@ void main() {
         return;
     }
 
-    // Divergence
-    float uC = texelFetch(u_sampler, pos,               0).r;
-    float uR = texelFetch(u_sampler, pos + ivec2(1,0),  0).r;
-    float vC = texelFetch(v_sampler, pos,               0).r;
-    float vU = texelFetch(v_sampler, pos + ivec2(0,1),  0).r;
+    // Neighbour pressures
+    float pL = texelFetch(p_sampler, pos - ivec2(1,0), 0).r;
+    float pR = texelFetch(p_sampler, pos + ivec2(1,0), 0).r;
+    float pD = texelFetch(p_sampler, pos - ivec2(0,1), 0).r;
+    float pU = texelFetch(p_sampler, pos + ivec2(0,1), 0).r;
 
+    // Divergence of the (fixed) velocity field
+    float uC = texelFetch(u_sampler, pos,              0).r;
+    float uR = texelFetch(u_sampler, pos + ivec2(1,0), 0).r;
+    float vC = texelFetch(v_sampler, pos,              0).r;
+    float vU = texelFetch(v_sampler, pos + ivec2(0,1), 0).r;
     float div = (uR - uC) + (vU - vC);
 
-    // SOR pressure update
+    // Poisson RHS: G = h * density / dt * div
     float cp = u_density * u_h / u_dt;
-    float pCorr = -div / sSum * u_overRelaxation;
-    float newP = pC + cp * pCorr;
+    float G = cp * div;
+
+    // Jacobi update: p_new = (sum_neighbors - G) / sSum
+    float pJacobi = (sL*pL + sR*pR + sD*pD + sU*pU - G) / sSum;
+
+    // Over-relaxation: p_new = (1 - ω) * p_old + ω * pJacobi
+    float newP = (1.0 - u_overRelaxation) * pC + u_overRelaxation * pJacobi;
 
     imageStore(p_out, pos, vec4(newP));
 }

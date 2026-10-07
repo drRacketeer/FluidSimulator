@@ -47,7 +47,7 @@ float sampleField(sampler2D tex, float x, float y, float dx, float dy) {
 void main() {
     // Skip ghost ring
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy) + ivec2(1, 1);
-
+    if (pos.x > int(u_res.x) - 2 || pos.y > int(u_res.y) - 2) return;
     float sC = texelFetch(solid_sampler, pos, 0).r;
     if (sC == 0.0) {
         // Solid cell: pass through unchanged
