@@ -580,7 +580,7 @@ while (!glfwWindowShouldClose(window)) {
     glUseProgram(forcesComputeProgram);
     glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_dt"), scene.dt);
     glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_gravity"), scene.gravity);
-    glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_vorticityConfinement"), 0.2f);
+    glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_vorticityConfinement"), 0.1f);
     glUniform2f(glGetUniformLocation(forcesComputeProgram, "u_res"), (float)gridW, (float)gridH);
     glUniform1f(glGetUniformLocation(forcesComputeProgram, "u_h"), scene.fluid->h);
 
@@ -685,52 +685,67 @@ while (!glfwWindowShouldClose(window)) {
 
     glDispatchCompute((gridW-2 + 15)/16, (gridH-2 + 15)/16, 1);
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
-        std::swap(scene.smokeTexA, scene.smokeTexB);
+    std::swap(scene.smokeTexA, scene.smokeTexB);
 
 
-        // Rendering
-        glClear(GL_COLOR_BUFFER_BIT);
-        // Use the rendering shader program
-        glUseProgram(program);
-        // Bind the GPU smoke texture instead of the old CPU texture
-        glActiveTexture(GL_TEXTURE0);
+    // Rendering
+    glClear(GL_COLOR_BUFFER_BIT);
+    // Use the rendering shader program
+    glUseProgram(program);
+    // Bind the GPU smoke texture instead of the old CPU texture
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
+    // (If you have uniforms for the texture, set them)
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    static int dbgFrame = 0;
+    if (++dbgFrame == 60) {
+        std::vector<float> buf(gridW * gridH);
         glBindTexture(GL_TEXTURE_2D, scene.smokeTexA);
-        // (If you have uniforms for the texture, set them)
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT, buf.data());
 
-        // Old CPU bound simulation
-        /*
-        // 1. Simulate one step
-        scene.simulateFluid();
-        // 2. Upload the scalar field you want to visualize (e.g., smoke density 'm')
-        glBindTexture(GL_TEXTURE_2D, texture);
-        // numX and numY are also swapped here to make it comform to the way it reads the fluid vectors
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numY, scene.fluid->numX, GL_RED, GL_FLOAT, scene.fluid->m.data());
-        
+        float mn = 1e9f, mx = -1e9f, sum = 0;
+        for (float v : buf) { mn = std::min(mn, v); mx = std::max(mx, v); sum += v; }
+        std::cout << "m: min=" << mn << " max=" << mx
+                << " mean=" << sum/(gridW*gridH) << "\n";
 
-        // 3. Render
-        glClear(GL_COLOR_BUFFER_BIT);
-        glUseProgram(program);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        */
-        // ImGui UI render
-        renderUi(imGuiIo);
-
-        // Render ImGui overlay
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        
-        // 4. Swap and poll
-        glfwSwapBuffers(window);
+        // sample a few interior cells
+        std::cout << "m[50][50]=" << buf[50*gridW + 50]
+                << " m[10][80]=" << buf[80*gridW + 10]
+                << " m[80][20]=" << buf[20*gridW + 80] << "\n";
     }
+    // Old CPU bound simulation
+    /*
+    // 1. Simulate one step
+    scene.simulateFluid();
+    // 2. Upload the scalar field you want to visualize (e.g., smoke density 'm')
+    glBindTexture(GL_TEXTURE_2D, texture);
+    // numX and numY are also swapped here to make it comform to the way it reads the fluid vectors
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, scene.fluid->numY, scene.fluid->numX, GL_RED, GL_FLOAT, scene.fluid->m.data());
+    
 
-    // ImGui cleanup
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    // 3. Render
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(program);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    */
+    // ImGui UI render
+    renderUi(imGuiIo);
 
-    return 0;
+    // Render ImGui overlay
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    
+    // 4. Swap and poll
+    glfwSwapBuffers(window);
+}
+
+// ImGui cleanup
+ImGui_ImplOpenGL3_Shutdown();
+ImGui_ImplGlfw_Shutdown();
+ImGui::DestroyContext();
+
+return 0;
 }

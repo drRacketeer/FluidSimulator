@@ -15,8 +15,12 @@ uniform float u_vorticityConfinement;
 uniform vec2  u_res;
 uniform float u_h;
 
+// Compute scalar vorticity ω = ∂v/∂x - ∂u/∂y at cell p.
+// p is clamped to the interior so that p±1 reads stay within the texture.
 float computeOmega(ivec2 p) {
-    // p is always an interior cell (≥1, ≤res-2) because the caller ensures it.
+    ivec2 res = ivec2(u_res);
+    p = clamp(p, ivec2(1), res - ivec2(2));
+
     float vR = texelFetch(v_sampler, p + ivec2(1,0), 0).r;
     float vL = texelFetch(v_sampler, p - ivec2(1,0), 0).r;
     float uU = texelFetch(u_sampler, p + ivec2(0,1), 0).r;
@@ -25,34 +29,50 @@ float computeOmega(ivec2 p) {
 }
 
 void main() {
-    // Skip ghost ring
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy) + ivec2(1, 1);
     if (pos.x > int(u_res.x) - 2 || pos.y > int(u_res.y) - 2) return;
-    float solid      = texelFetch(solid_sampler, pos,             0).r;
-    float solidBelow = texelFetch(solid_sampler, pos - ivec2(0,1),0).r;
+
+    float solid      = texelFetch(solid_sampler, pos,               0).r;
+    float solidBelow = texelFetch(solid_sampler, pos - ivec2(0,1), 0).r;
 
     float u = texelFetch(u_sampler, pos, 0).r;
     float v = texelFetch(v_sampler, pos, 0).r;
 
-    // Gravity — guarded by both current and below cell (CPU parity)
+    // --- Gravity (CPU parity) ---
     if (solid != 0.0 && solidBelow != 0.0) {
         v += u_gravity * u_dt;
     }
 
-    // Vorticity confinement
-    float omega  = computeOmega(pos);
-    float omegaR = computeOmega(pos + ivec2(1,0));
-    float omegaL = computeOmega(pos - ivec2(1,0));
-    float omegaU = computeOmega(pos + ivec2(0,1));
-    float omegaD = computeOmega(pos - ivec2(0,1));
+    // --- Vorticity confinement (Fedkiw et al. 2001) ---
+    // Only apply in fluid cells
+    if (solid != 0.0) {
+        ivec2 res = ivec2(u_res);
 
-    vec2 gradOmega = vec2(omegaR - omegaL, omegaU - omegaD) / (2.0 * u_h);
-    float mag = length(gradOmega);
-    if (mag > 1e-6) {
-        vec2 dir = gradOmega / mag;
-        vec2 confinementForce = u_vorticityConfinement * vec2(omega * dir.y, -omega * dir.x);
-        u += confinementForce.x * u_dt;
-        v += confinementForce.y * u_dt;
+        // Clamp outer sample points to interior, so computeOmega's internal
+        // reads (which go one step further) always stay in [0, res-1].
+        ivec2 pR = clamp(pos + ivec2(1,0), ivec2(1), res - ivec2(2));
+        ivec2 pL = clamp(pos - ivec2(1,0), ivec2(1), res - ivec2(2));
+        ivec2 pU = clamp(pos + ivec2(0,1), ivec2(1), res - ivec2(2));
+        ivec2 pD = clamp(pos - ivec2(0,1), ivec2(1), res - ivec2(2));
+
+        float omega  = computeOmega(pos);
+        float omegaR = computeOmega(pR);
+        float omegaL = computeOmega(pL);
+        float omegaU = computeOmega(pU);
+        float omegaD = computeOmega(pD);
+
+        // ∇|ω| using central differences
+        vec2 grad = vec2(abs(omegaR) - abs(omegaL),
+                         abs(omegaU) - abs(omegaD)) / (2.0 * u_h);
+        float mag = length(grad);
+
+        if (mag > 1e-6) {
+            vec2 N = grad / mag;                       // unit vector along ∇|ω|
+            // N × ω  (in 2D: (N.y·ω, -N.x·ω))
+            vec2 force = u_vorticityConfinement * u_h * vec2(N.y * omega, -N.x * omega);
+            u += force.x * u_dt;
+            v += force.y * u_dt;
+        }
     }
 
     imageStore(u_out, pos, vec4(u, 0.0, 0.0, 0.0));
