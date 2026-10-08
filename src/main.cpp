@@ -17,8 +17,8 @@ struct Scene {
     // Fluid param
     float density = 1000.0f;
     // initial numX and numY without +2 ghostcells
-    int numX = 100;
-    int numY = 100;
+    int numX = 200;
+    int numY = 200;
     float h = 0.02f;
 
     float gravity = -9.81f;
@@ -473,6 +473,18 @@ int main() {
     glBindTexture(GL_TEXTURE_2D, scene.uTexA);
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT, check.data());
 
+    // Also seed the B textures with the same initial data
+    // so the ghost ring stays consistent across swaps.
+
+    glBindTexture(GL_TEXTURE_2D, scene.smokeTexB);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->m.data());
+
+    glBindTexture(GL_TEXTURE_2D, scene.uTexB);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->u.data());
+
+    glBindTexture(GL_TEXTURE_2D, scene.vTexB);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, gridW, gridH, GL_RED, GL_FLOAT, scene.fluid->v.data());
+
     int mismatches = 0;
     for (int i = 0; i < gridW * gridH; ++i)
         if (std::abs(check[i] - scene.fluid->u[i]) > 1e-6f) mismatches++;
@@ -645,6 +657,7 @@ while (!glfwWindowShouldClose(window)) {
     glMemoryBarrier(GL_ALL_BARRIER_BITS);
     std::swap(scene.uTexA, scene.uTexB);
     std::swap(scene.vTexA, scene.vTexB);
+    
     // Step 4: Advect Velocity
     glUseProgram(advectVelComputeProgram);
     glUniform1f(glGetUniformLocation(advectVelComputeProgram, "u_dt"), scene.dt);
