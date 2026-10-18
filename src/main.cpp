@@ -23,9 +23,9 @@ struct Scene {
 
     float gravity = -9.81f;
     float dt = 1.0f / 60.0f;
-    int numIters = 40;
+    int numIters = 30;
     int frameNr = 0;
-    float overRelaxation = 1.0f;
+    float overRelaxation = 1.9f;
     float obstacleX = 0.0f;
     float obstacleY = 0.0f;
     float obstacleRadius = 0.15f;
@@ -522,6 +522,7 @@ int main() {
     string projectComputeSrc = readShaderFile("src/project.comp");
     string advectVelComputeSrc = readShaderFile("src/advect_vel.comp");
     string advectSmokeComputeSrc= readShaderFile("src/advect_smoke.comp");
+    string pressureRBComputeSrc = readShaderFile("src/pressure_rb.comp");
 
     GLuint program = createShaderProgram(vertexSrc.c_str(), fragmentSrc.c_str());
     GLuint forcesComputeProgram = createComputeProgram(forcesComputeSrc.c_str());
@@ -529,6 +530,7 @@ int main() {
     GLuint projectComputeProgram = createComputeProgram(projectComputeSrc.c_str());
     GLuint advectVelComputeProgram = createComputeProgram(advectVelComputeSrc.c_str());
     GLuint advectSmokeComputeProgram = createComputeProgram(advectSmokeComputeSrc.c_str());
+    GLuint pressureRBProgram = createComputeProgram(pressureRBComputeSrc.c_str());
 
     // Step 4 Setup full quad VAO
     float vertices[] = {
@@ -611,28 +613,37 @@ while (!glfwWindowShouldClose(window)) {
     std::swap(scene.uTexA, scene.uTexB);
     std::swap(scene.vTexA, scene.vTexB);
     // Step 2: Pressure Solves (SOR iterations)
+    glUseProgram(pressureRBProgram);
+    glUniform1f(glGetUniformLocation(pressureRBProgram, "u_h"), scene.fluid->h);
+    glUniform1f(glGetUniformLocation(pressureRBProgram, "u_density"), scene.density);
+    glUniform1f(glGetUniformLocation(pressureRBProgram, "u_dt"), scene.dt);
+    glUniform1f(glGetUniformLocation(pressureRBProgram, "u_overRelaxation"), scene.overRelaxation);
+    glUniform2f(glGetUniformLocation(pressureRBProgram, "u_res"), (float)gridW, (float)gridH);
+
+    // Bind inputs (velocity, solid)
+    glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, scene.uTexA);
+    glUniform1i(glGetUniformLocation(pressureRBProgram, "u_sampler"), 0);
+    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, scene.vTexA);
+    glUniform1i(glGetUniformLocation(pressureRBProgram, "v_sampler"), 1);
+    glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, scene.solidTex);
+    glUniform1i(glGetUniformLocation(pressureRBProgram, "solid_sampler"), 2);
+
+    // Bind pTexA as read-write image
+    glBindImageTexture(0, scene.pTexA, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32F);
+
+    GLuint groupsX = (gridW - 2 + 15) / 16;
+    GLuint groupsY = (gridH - 2 + 15) / 16;
+
     for (int iter = 0; iter < scene.numIters; ++iter) {
-        glUseProgram(pressureComputeProgram);
-        glUniform1f(glGetUniformLocation(pressureComputeProgram, "u_h"), scene.fluid->h);
-        glUniform1f(glGetUniformLocation(pressureComputeProgram, "u_density"), scene.density);
-        glUniform1f(glGetUniformLocation(pressureComputeProgram, "u_dt"), scene.dt);
-        glUniform1f(glGetUniformLocation(pressureComputeProgram, "u_overRelaxation"), scene.overRelaxation);
-        glUniform2f(glGetUniformLocation(pressureComputeProgram, "u_res"), (float)gridW, (float)gridH);
-
-        glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, scene.uTexA);
-        glUniform1i(glGetUniformLocation(pressureComputeProgram, "u_sampler"), 0);
-        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, scene.vTexA);
-        glUniform1i(glGetUniformLocation(pressureComputeProgram, "v_sampler"), 1);
-        glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, scene.pTexA);
-        glUniform1i(glGetUniformLocation(pressureComputeProgram, "p_sampler"), 2);
-        glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, scene.solidTex);
-        glUniform1i(glGetUniformLocation(pressureComputeProgram, "solid_sampler"), 3);
-
-        glBindImageTexture(0, scene.pTexB, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
-
-        glDispatchCompute((gridW-2 + 15)/16, (gridH-2 + 15)/16, 1);
+        // Red pass
+        glUniform1i(glGetUniformLocation(pressureRBProgram, "u_pass"), 0);
+        glDispatchCompute(groupsX, groupsY, 1);
         glMemoryBarrier(GL_ALL_BARRIER_BITS);
-        std::swap(scene.pTexA, scene.pTexB);
+
+        // Black pass
+        glUniform1i(glGetUniformLocation(pressureRBProgram, "u_pass"), 1);
+        glDispatchCompute(groupsX, groupsY, 1);
+        glMemoryBarrier(GL_ALL_BARRIER_BITS);
     }
     // Step 3: Subtract Pressure Gradient (project)
     glUseProgram(projectComputeProgram);
