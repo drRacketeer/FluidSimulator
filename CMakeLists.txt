@@ -21,7 +21,9 @@ set(IMGUI_SOURCES
 # Add the executable
 add_executable(FluidSimulator
                 src/main.cpp
-                src/Fluid.cpp
+                src/FluidInterface.cpp
+                src/FluidCPU.cpp
+                src/FluidGPU.cpp
                 external/glad/src/glad.c
                 ${IMGUI_SOURCES})
 
