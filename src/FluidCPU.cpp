@@ -74,7 +74,6 @@ void FluidCPU::setupScene(int sceneNr) {
         overRelaxation = 1.0f;
         obstacleRadius = 0.1f;
     }
-
     uploadFields();
 }
 

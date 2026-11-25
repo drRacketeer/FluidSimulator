@@ -19,6 +19,10 @@ struct Scene {
     bool useGPU       = false;
     bool showSmoke    = true;
     bool showPressure = false;
+    float density = 1000.0f;
+    int numX = 100;
+    int numY = 100;
+    float h = 0.02f;
 
     FluidInterface* fluid = nullptr;
 
@@ -192,7 +196,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    GLFWwindow* window = glfwCreateWindow(900, 900, "Fluid Simulation", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1000, 1000, "Fluid Simulation", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window\n";
         return -1;
@@ -216,11 +220,9 @@ int main() {
 
     // Create the fluid (GPU or CPU)
     if (scene.useGPU) {
-        std::cout << "Using GPU backend\n";
-        scene.fluid = new FluidGPU(1000.0f, 200, 200, 0.02f);
+        scene.fluid = new FluidGPU(scene.density, scene.numX, scene.numY, scene.h);
     } else {
-        std::cout << "Using CPU backend\n";
-        scene.fluid = new FluidCPU(1000.0f, 100, 100, 0.02f);
+        scene.fluid = new FluidCPU(scene.density, scene.numX, scene.numY, scene.h);
     }
     scene.fluid->setupScene(1);
 
